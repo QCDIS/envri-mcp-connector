@@ -128,12 +128,4 @@ def terms_agg(index: str, field: str, limit: int = 50, filter_query: dict | None
 
 
 def index_stats(index: str):
-    client = es_index.get_client()
-    resp = client.search(
-        index=index,
-        size=0,
-        aggs={"by_source": {"terms": {"field": "source", "size": 10}}},
-    )
-    total = resp["hits"]["total"]["value"]
-    by_source = {b["key"]: b["doc_count"] for b in resp["aggregations"]["by_source"]["buckets"]}
-    return {"total": total, "by_source": by_source}
+    return es_index.index_stats(index)

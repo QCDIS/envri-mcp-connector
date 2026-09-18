@@ -1,6 +1,6 @@
 """HTTP API exposing the knowledge base's hybrid search as plain JSON.
 
-Two routes, deliberately different contracts:
+Two search routes, deliberately different contracts:
 - `GET /search`: fixed public shape (score/url/header/vector/summary/
   highlight/last_modified) - e.g. for a downstream system doing its own
   vector re-ranking.
@@ -8,18 +8,27 @@ Two routes, deliberately different contracts:
   kb_common.hybrid_search.search(), used by kb_mcp so it can search without
   loading the embedding model itself.
 
+`POST /fetch` and `POST /index` trigger the ingestion pipeline (fetch raw
+Euro-Argo records, then embed and index cached records into Elasticsearch).
+Both run in the background and return immediately - watch server logs for
+progress. `GET /stats` reports document counts, overall and per source.
+
 Run directly:
     PYTHONPATH=src python -m kb_api.main
 """
 from typing import Literal
 
-from fastapi import FastAPI, Query
+from fastapi import BackgroundTasks, FastAPI, Query
 from pydantic import BaseModel
 
 from kb_api import config
 from kb_api.format import FIELDS, format_hit
+from kb_argo import fetch as argo_fetch
+from kb_argo import pipeline as argo_pipeline
 from kb_common import config as common_config
-from kb_common import hybrid_search
+from kb_common import es_index, hybrid_search
+from kb_oso import fetch as oso_fetch
+from kb_oso import pipeline as oso_pipeline
 
 app = FastAPI(title="Ifremer Knowledge Base API")
 
@@ -57,6 +66,42 @@ def internal_search(req: InternalSearchRequest) -> list[dict]:
         fields=tuple(req.fields),
         highlight_field=req.highlight_field,
     )
+
+
+@app.post("/fetch")
+def fetch(
+    background_tasks: BackgroundTasks,
+    source: Literal["euro_argo", "oso"] = Query(..., description="Which source to fetch"),
+    limit: int | None = Query(None, description="euro_argo only: fetch just the first N floats (testing)"),
+    force: bool = Query(False, description="Re-fetch even if already cached on disk"),
+) -> dict:
+    """Fetch raw source data into the local cache: Euro-Argo float records
+    from the upstream API, or the OSO ontology OWL file from its GitHub
+    release. Runs in the background; see server logs for progress."""
+    if source == "euro_argo":
+        background_tasks.add_task(argo_fetch.fetch_all, limit=limit, force=force)
+    else:
+        background_tasks.add_task(oso_fetch.fetch_all, force=force)
+    return {"status": "started", "source": source}
+
+
+@app.post("/index")
+def index(
+    background_tasks: BackgroundTasks,
+    source: Literal["euro_argo", "oso"] = Query(..., description="Which source to embed and index"),
+    limit: int | None = Query(None, description="Only index the first N records (testing)"),
+) -> dict:
+    """Transform, embed and index cached records for one source into
+    Elasticsearch. Runs in the background; see server logs for progress."""
+    run_index = argo_pipeline.run_index if source == "euro_argo" else oso_pipeline.run_index
+    background_tasks.add_task(run_index, limit=limit)
+    return {"status": "started", "source": source}
+
+
+@app.get("/stats")
+def stats() -> dict:
+    """Document counts in the knowledge base, overall and per source."""
+    return es_index.index_stats(common_config.ES_INDEX)
 
 
 @app.get("/health")

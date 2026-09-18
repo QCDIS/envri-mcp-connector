@@ -56,6 +56,19 @@ def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None
     client.indices.put_mapping(index=index, properties=build_mapping(dims, extra_properties)["mappings"]["properties"])
 
 
+def index_stats(index: str = None) -> dict:
+    index = index or config.ES_INDEX
+    client = get_client()
+    resp = client.search(
+        index=index,
+        size=0,
+        aggs={"by_source": {"terms": {"field": "source", "size": 10}}},
+    )
+    total = resp["hits"]["total"]["value"]
+    by_source = {b["key"]: b["doc_count"] for b in resp["aggregations"]["by_source"]["buckets"]}
+    return {"total": total, "by_source": by_source}
+
+
 def bulk_index(client: Elasticsearch, documents: list[dict], index: str = None):
     """Stamps every document with `indexed_at` (now, UTC) before writing."""
     index = index or config.ES_INDEX

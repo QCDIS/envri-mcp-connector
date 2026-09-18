@@ -1,6 +1,7 @@
-"""Embed OSO ontology individuals and index them into Elasticsearch.
+"""Fetch the OSO ontology, embed its individuals, index them into Elasticsearch.
 
 Usage:
+    python -m kb_oso.pipeline fetch [--force]
     python -m kb_oso.pipeline index [--limit N]
 """
 import argparse
@@ -9,7 +10,7 @@ import logging
 
 from tqdm import tqdm
 
-from kb_oso import es_mapping, transform
+from kb_oso import es_mapping, fetch, transform
 from kb_common import config, embed, es_index
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -55,9 +56,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
+    p_fetch = sub.add_parser("fetch", help="Fetch the OSO ontology OWL file")
+    p_fetch.add_argument("--force", action="store_true")
+
     p_index = sub.add_parser("index", help="Transform, embed and index OSO individuals")
     p_index.add_argument("--limit", type=int, default=None)
 
     args = parser.parse_args()
-    if args.command == "index":
+    if args.command == "fetch":
+        fetch.fetch_all(force=args.force)
+    elif args.command == "index":
         run_index(limit=args.limit)

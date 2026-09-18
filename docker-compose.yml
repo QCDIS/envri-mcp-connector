@@ -1,6 +1,6 @@
 services:
   elasticsearch:
-    image: gitlab-registry.ifremer.fr/ifremer-commons/docker/images/elasticsearch:9.4.4
+    image: elasticsearch:9.4.4
     container_name: ifremer-kb-elasticsearch
     restart: unless-stopped
     environment:
