@@ -1,0 +1,85 @@
+services:
+  elasticsearch:
+    image: gitlab-registry.ifremer.fr/ifremer-commons/docker/images/elasticsearch:9.4.4
+    container_name: ifremer-kb-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:$${ELASTIC_PASSWORD:-changeme} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kb-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: ifremer-kb-api:latest
+    container_name: ifremer-kb-api
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ES_URL=http://elasticsearch:9200
+      - ES_USERNAME=elastic
+      - ES_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - ES_INDEX=${ES_INDEX:-ifremer-knowledge-base}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  kb-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: ifremer-kb-mcp:latest
+    container_name: ifremer-kb-mcp
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kb-api:
+        condition: service_healthy
+    environment:
+      - ES_URL=http://elasticsearch:9200
+      - ES_USERNAME=elastic
+      - ES_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - ES_INDEX=${ES_INDEX:-ifremer-knowledge-base}
+      - KB_API_URL=http://kb-api:8080
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8765
+    ports:
+      - "8765:8765"
+
+volumes:
+  esdata:

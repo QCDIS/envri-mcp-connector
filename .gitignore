@@ -1,0 +1,5 @@
+.venv
+.claude
+.env
+data/argo
+__pycache__
