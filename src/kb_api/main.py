@@ -19,7 +19,7 @@ Run directly:
 from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from kb_api import config
 from kb_api.format import FIELDS, format_hit
@@ -32,12 +32,38 @@ from kb_oso import pipeline as oso_pipeline
 
 app = FastAPI(title="Ifremer Knowledge Base API")
 
+Source = Literal["euro_argo", "oso"]
 
-@app.get("/search")
+
+class SearchHit(BaseModel):
+    score: float
+    url: str | None = Field(None, description="Fleet Monitoring page (euro_argo) or OSO ontology IRI (oso)")
+    header: str = Field(description="'Argo float <wmo>', or the OSO pref_label / id")
+    vector: list[float] | None = Field(None, description="Document embedding")
+    summary: str | None = Field(None, description="Indexed summary text")
+    highlight: list[str] = Field(description="Matched fragments of summary; empty if no lexical match")
+    last_modified: str | None = Field(None, description="Index timestamp (ISO 8601); null until re-ingested")
+
+
+class TaskStarted(BaseModel):
+    status: Literal["started"]
+    source: Source
+
+
+class Stats(BaseModel):
+    total: int
+    by_source: dict[str, int]
+
+
+class Health(BaseModel):
+    status: Literal["ok"]
+
+
+@app.get("/search", response_model=list[SearchHit])
 def search(
     query: str = Query(..., min_length=1, description="Natural-language search query"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of results to return"),
-    source: Literal["euro_argo", "oso"] | None = Query(
+    source: Source | None = Query(
         None, description="Restrict results to one source: Euro-Argo float metadata or the OSO ontology"
     ),
 ) -> list[dict]:
@@ -68,12 +94,12 @@ def internal_search(req: InternalSearchRequest) -> list[dict]:
     )
 
 
-@app.post("/fetch")
+@app.post("/fetch", response_model=TaskStarted)
 def fetch(
     background_tasks: BackgroundTasks,
-    source: Literal["euro_argo", "oso"] = Query(..., description="Which source to fetch"),
+    source: Source = Query(..., description="Which source to fetch"),
     limit: int | None = Query(None, description="euro_argo only: fetch just the first N floats (testing)"),
-    force: bool = Query(False, description="Re-fetch even if already cached on disk"),
+    force: bool = Query(True, description="Re-fetch even if already cached on disk"),
 ) -> dict:
     """Fetch raw source data into the local cache: Euro-Argo float records
     from the upstream API, or the OSO ontology OWL file from its GitHub
@@ -85,10 +111,10 @@ def fetch(
     return {"status": "started", "source": source}
 
 
-@app.post("/index")
+@app.post("/index", response_model=TaskStarted)
 def index(
     background_tasks: BackgroundTasks,
-    source: Literal["euro_argo", "oso"] = Query(..., description="Which source to embed and index"),
+    source: Source = Query(..., description="Which source to embed and index"),
     limit: int | None = Query(None, description="Only index the first N records (testing)"),
 ) -> dict:
     """Transform, embed and index cached records for one source into
@@ -98,13 +124,13 @@ def index(
     return {"status": "started", "source": source}
 
 
-@app.get("/stats")
+@app.get("/stats", response_model=Stats)
 def stats() -> dict:
     """Document counts in the knowledge base, overall and per source."""
     return es_index.index_stats(common_config.ES_INDEX)
 
 
-@app.get("/health")
+@app.get("/health", response_model=Health)
 def health() -> dict:
     return {"status": "ok"}
 
