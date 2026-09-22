@@ -35,10 +35,9 @@ app = FastAPI(title="Ifremer Knowledge Base API")
 
 @app.on_event("startup")
 def _warm_embedding_model() -> None:
-    """Loads the model at startup instead of on the first search, so the
-    model_load cold-start spike shows up in server logs, not in a user's
-    first request."""
-    embed.get_model()
+    """Loads the model and runs a throwaway query through it at startup
+    instead of on the first search."""
+    embed.embed_query("warmup")
 
 
 @app.middleware("http")
