@@ -1,9 +1,4 @@
-"""Minimal in-memory sliding-window rate limiter.
-
-Sufficient for a single-process deployment (both kb_mcp and kb_api run as
-one uvicorn worker each here) - state is per-process, not shared across
-multiple workers/replicas.
-"""
+"""Minimal in-memory sliding-window rate limiter."""
 import time
 from collections import deque
 from threading import Lock

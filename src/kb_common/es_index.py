@@ -23,8 +23,7 @@ BASE_PROPERTIES = {
 
 @lru_cache(maxsize=1)
 def get_client() -> Elasticsearch:
-    """Cached - the client pools its own HTTP connections, so building a new
-    one per search wastes the TCP/TLS handshake for no reason."""
+    """Cached - the client pools its own HTTP connections"""
     kwargs = {}
     if config.ES_API_KEY:
         kwargs["api_key"] = config.ES_API_KEY

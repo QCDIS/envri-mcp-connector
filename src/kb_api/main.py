@@ -1,18 +1,5 @@
 """HTTP API exposing the knowledge base's hybrid search as plain JSON.
 
-Two search routes, deliberately different contracts:
-- `GET /search`: fixed public shape (score/url/header/vector/summary/
-  highlight/last_modified) - e.g. for a downstream system doing its own
-  vector re-ranking.
-- `POST /internal/search`: unshaped passthrough to
-  kb_common.hybrid_search.search(), used by kb_mcp so it can search without
-  loading the embedding model itself.
-
-`POST /fetch` and `POST /index` trigger the ingestion pipeline (fetch raw
-Euro-Argo records, then embed and index cached records into Elasticsearch).
-Both run in the background and return immediately - watch server logs for
-progress. `GET /stats` reports document counts, overall and per source.
-
 Run directly:
     PYTHONPATH=src python -m kb_api.main
 """

@@ -30,11 +30,7 @@ log = logging.getLogger(__name__)
 
 
 def _timed(fn):
-    """Wraps an MCP tool to log its total time and per-stage breakdown
-    (populated by kb_common.timing.stage/record calls anywhere in the tool's
-    call stack - notably kb_mcp.search's api_http and kb_api's own stages,
-    surfaced back here via the Server-Timing response header). Set
-    LOG_TIMING=false to skip this entirely."""
+    """Wraps an MCP tool to log its total time and per-stage breakdown"""
     if not common_config.LOG_TIMING:
         return fn
 
@@ -50,8 +46,7 @@ def _timed(fn):
 
 
 def _audited(fn):
-    """Logs which authenticated caller invoked this tool - a minimal audit
-    trail, independent of LOG_TIMING (unlike _timed, this always runs)."""
+    """Logs which authenticated caller invoked this tool."""
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -64,10 +59,7 @@ def _audited(fn):
 
 
 class StaticBearerTokenVerifier(TokenVerifier):
-    """Verifies a caller's bearer token against the static KB_READ_TOKENS /
-    KB_ADMIN_TOKENS allowlist (kb_common.auth) - no OAuth authorization
-    server is involved. All kb_mcp tools are read-only, so any valid token
-    (read or admin tier) is sufficient here."""
+    """Verifies a caller's bearer token"""
 
     async def verify_token(self, token: str) -> AccessToken | None:
         caller = shared_auth.verify_read_token(token)
@@ -76,14 +68,8 @@ class StaticBearerTokenVerifier(TokenVerifier):
         return AccessToken(token=token, client_id=caller, scopes=["read"])
 
 
-# issuer_url/resource_server_url are required by AuthSettings but otherwise
-# inert here: no auth_server_provider is configured, so the SDK never mounts
-# /authorize or /token routes against them (mcp/server/mcpserver/server.py,
-# "Add auth endpoints if auth server provider is configured"). Built from the
-# first allowed host since that's already this server's own address.
 _resource_url = f"http://{config.MCP_ALLOWED_HOSTS[0] if config.MCP_ALLOWED_HOSTS else f'localhost:{config.MCP_PORT}'}"
 
-# KB_SECURITY_ENABLED=false bypasses auth entirely
 _mcp_auth_kwargs = {}
 if common_config.SECURITY_ENABLED:
     _mcp_auth_kwargs["auth"] = AuthSettings(
@@ -111,11 +97,6 @@ mcp = MCPServer(
 Source = Literal["euro_argo", "oso"]
 FacetField = Literal["data_center_name", "networks", "sensor_codes", "project_name"]
 
-# Shared parameter constraints - bounds a caller can't exceed regardless of
-# what they pass, since an unbounded `limit`/`k` scales the underlying ES
-# query (see kb_common.hybrid_search.knn_clause's num_candidates) and an
-# unbounded id/name string has no reason to be more than a few hundred
-# characters for any real Argo/OSO identifier.
 Limit = Annotated[int, Field(ge=1, le=100)]
 FacetLimit = Annotated[int, Field(ge=1, le=500)]
 FilterValue = Annotated[str, Field(min_length=1, max_length=200)]
@@ -131,14 +112,7 @@ def search_knowledge_base(
     source: Source | None = None,
     k: Limit = 10,
 ) -> list[dict]:
-    """Hybrid semantic + keyword search across the knowledge base. This is the
-    primary, general-purpose tool - use it for any open-ended question.
-    Optionally restrict to one source ("euro_argo" or "oso"). Each result
-    includes "highlights": the specific matched fragment(s) of summary_text
-    (wrapped in <em> tags) - check these first to see why a hit matched
-    before reading the full summary_text. Each result also includes "url":
-    a dereferenceable link to the original data source (Euro-Argo fleet
-    monitoring or the OSO ontology) for the user to consult directly."""
+    """Hybrid semantic + keyword search across the knowledge base."""
     return search.search(common_config.ES_INDEX, query, k=k, source=source)
 
 
@@ -155,8 +129,7 @@ def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, patter
 @_audited
 def get_oso_entity(oso_id: FilterValue) -> dict | None:
     """Fetch the full record for one OSO ontology entity by its id
-    (e.g. "Ifremer", "ANTARES") - use search_knowledge_base or the list_oso_*
-    tools first to find the right id."""
+    (e.g. "Ifremer", "ANTARES")"""
     return search.get_by_id(common_config.ES_INDEX, f"oso:{oso_id}")
 
 
@@ -185,8 +158,7 @@ def find_argo_floats_in_box(
     limit: Limit = 20,
 ) -> list[dict]:
     """Find Argo floats whose last known position falls within a lat/lon
-    bounding box - use this instead of find_argo_floats_near when you have a
-    region's bounds rather than a center point and radius."""
+    bounding box."""
     return search.geo_bounding_box(common_config.ES_INDEX, "last_cycle_geopoint", min_lat, max_lat, min_lon, max_lon, limit)
 
 
@@ -195,10 +167,8 @@ def find_argo_floats_in_box(
 @_audited
 def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[dict]:
     """List Argo floats last located in a given specific named sea (e.g.
-    "Mediterranean Sea - Western Basin", "Black Sea", "Gulf of Mexico") - one
-    of 101 IHO sea areas. Use list_seas first to see the exact values that
-    exist. For a broader ocean basin instead (Atlantic/Pacific/Indian/Arctic/
-    Southern), use list_argo_floats_by_ocean."""
+    "Black Sea", "Gulf of Mexico"). For a broader ocean basin instead
+    (Atlantic/Pacific/Indian/Arctic/Southern), use list_argo_floats_by_ocean."""
     return search.term_filter(common_config.ES_INDEX, "sea_area.keyword", sea_area, limit)
 
 
@@ -288,14 +258,7 @@ def get_index_stats() -> dict:
 
 
 class _RateLimitMiddleware:
-    """Per-source-IP rate limiting for the whole /mcp endpoint.
-
-    Keyed by IP rather than authenticated caller identity: mcp.run() doesn't
-    expose a hook to insert middleware between its own layers, so this wraps
-    the whole ASGI app from the outside, before the SDK's auth middleware
-    has run. For the small, known set of callers this server expects, IP is
-    a reasonable proxy for caller identity anyway.
-    """
+    """Per-source-IP rate limiting for the whole /mcp endpoint."""
 
     def __init__(self, app, limiter: RateLimiter):
         self.app = app
@@ -318,18 +281,12 @@ if __name__ == "__main__":
     import uvicorn
     from starlette.responses import Response
 
-    # MCP_HOST is 0.0.0.0 (see kb_mcp.config), so the SDK's own loopback-only
-    # auto-enable never kicks in - configure DNS-rebinding protection
-    # explicitly instead. allowed_origins stays empty: callers here are
-    # server-to-server (no browser Origin header), and a request with no
-    # Origin header at all already passes unconditionally.
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=common_config.SECURITY_ENABLED,
         allowed_hosts=config.MCP_ALLOWED_HOSTS,
         allowed_origins=[],
     )
-    # mcp.run() doesn't take a middleware= kwarg, so the app is built and
-    # wrapped by hand here instead of calling it.
+
     app = mcp.streamable_http_app(host=config.MCP_HOST, transport_security=transport_security)
     limiter = RateLimiter(common_config.RATE_LIMIT_MAX_REQUESTS, common_config.RATE_LIMIT_WINDOW_SECONDS)
     app = _RateLimitMiddleware(app, limiter)

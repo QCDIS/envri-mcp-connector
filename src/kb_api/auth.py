@@ -15,10 +15,6 @@ from kb_common.ratelimit import RateLimiter
 log = logging.getLogger(__name__)
 _limiter = RateLimiter(common_config.RATE_LIMIT_MAX_REQUESTS, common_config.RATE_LIMIT_WINDOW_SECONDS)
 
-# auto_error=False: a missing/malformed header should fall through to our
-# own 401, not FastAPI's default 403 - keeps 401 (no valid token) and 403
-# (valid token, wrong tier, see require_admin_token) distinct. This also
-# gives /docs a proper "Authorize" padlock instead of an undocumented header.
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 

@@ -2,8 +2,6 @@
 scripts/eval_retrieval.py reach it over HTTP via kb_api's /internal/search.
 
 Combines `knn` + `query` in one Elasticsearch request (native score summing)
-rather than the `retriever`/`rrf` API, which needs a Platinum/Enterprise
-license and 403s on a Basic-license cluster.
 """
 from kb_common import embed, es_index, timing
 
