@@ -17,7 +17,10 @@ services:
     volumes:
       - esdata:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      # Loopback-only: kb-api/kb-mcp reach this over the compose network
+      # (elasticsearch:9200) and don't need it published at all; this stays
+      # only for host-side debugging (curl localhost:9200), not external access.
+      - "127.0.0.1:9200:9200"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s

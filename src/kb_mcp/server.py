@@ -13,11 +13,16 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+from kb_common import auth as shared_auth
 from kb_common import config as common_config
 from kb_common import timing
+from kb_common.ratelimit import RateLimiter
 from kb_mcp import config, search
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -44,6 +49,40 @@ def _timed(fn):
     return wrapper
 
 
+def _audited(fn):
+    """Logs which authenticated caller invoked this tool - a minimal audit
+    trail, independent of LOG_TIMING (unlike _timed, this always runs)."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        access_token = get_access_token()
+        caller = access_token.client_id if access_token else "unknown"
+        log.info("caller=%s tool=%s", caller, fn.__name__)
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+class StaticBearerTokenVerifier(TokenVerifier):
+    """Verifies a caller's bearer token against the static KB_READ_TOKENS /
+    KB_ADMIN_TOKENS allowlist (kb_common.auth) - no OAuth authorization
+    server is involved. All kb_mcp tools are read-only, so any valid token
+    (read or admin tier) is sufficient here."""
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        caller = shared_auth.verify_read_token(token)
+        if caller is None:
+            return None
+        return AccessToken(token=token, client_id=caller, scopes=["read"])
+
+
+# issuer_url/resource_server_url are required by AuthSettings but otherwise
+# inert here: no auth_server_provider is configured, so the SDK never mounts
+# /authorize or /token routes against them (mcp/server/mcpserver/server.py,
+# "Add auth endpoints if auth server provider is configured"). Built from the
+# first allowed host since that's already this server's own address.
+_resource_url = f"http://{config.MCP_ALLOWED_HOSTS[0] if config.MCP_ALLOWED_HOSTS else f'localhost:{config.MCP_PORT}'}"
+
 mcp = MCPServer(
     "ifremer-knowledge-base",
     instructions=(
@@ -53,6 +92,17 @@ mcp = MCPServer(
         "language questions; use the list_*/get_index_stats tools first if you "
         "need to know what values exist before filtering."
     ),
+    auth=AuthSettings(
+        issuer_url=_resource_url,
+        resource_server_url=_resource_url,
+        required_scopes=["read"],
+        # Our tokens carry no audience/resource claim of their own - trust
+        # comes from the token set itself being a shared secret, not from
+        # RFC 8707 resource binding - so the SDK's resource-audience check
+        # is explicitly opted out of rather than left to warn/default.
+        validate_token_resource=False,
+    ),
+    token_verifier=StaticBearerTokenVerifier(),
 )
 
 Source = Literal["euro_argo", "oso"]
@@ -72,6 +122,7 @@ Longitude = Annotated[float, Field(ge=-180, le=180)]
 
 @mcp.tool()
 @_timed
+@_audited
 def search_knowledge_base(
     query: Annotated[str, Field(min_length=1, max_length=1000)],
     source: Source | None = None,
@@ -90,6 +141,7 @@ def search_knowledge_base(
 
 @mcp.tool()
 @_timed
+@_audited
 def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, pattern=r"^[0-9]+$")]) -> dict | None:
     """Fetch the full record for one Argo float by its WMO id (e.g. "6902919")."""
     return search.get_by_id(common_config.ES_INDEX, f"euro_argo:{wmo}")
@@ -97,6 +149,7 @@ def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, patter
 
 @mcp.tool()
 @_timed
+@_audited
 def get_oso_entity(oso_id: FilterValue) -> dict | None:
     """Fetch the full record for one OSO ontology entity by its id
     (e.g. "Ifremer", "ANTARES") - use search_knowledge_base or the list_oso_*
@@ -106,6 +159,7 @@ def get_oso_entity(oso_id: FilterValue) -> dict | None:
 
 @mcp.tool()
 @_timed
+@_audited
 def find_argo_floats_near(
     lat: Latitude,
     lon: Longitude,
@@ -119,6 +173,7 @@ def find_argo_floats_near(
 
 @mcp.tool()
 @_timed
+@_audited
 def find_argo_floats_in_box(
     min_lat: Latitude,
     max_lat: Latitude,
@@ -134,6 +189,7 @@ def find_argo_floats_in_box(
 
 @mcp.tool()
 @_timed
+@_audited
 def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[dict]:
     """List Argo floats last located in a given specific named sea (e.g.
     "Mediterranean Sea - Western Basin", "Black Sea", "Gulf of Mexico") - one
@@ -145,6 +201,7 @@ def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[di
 
 @mcp.tool()
 @_timed
+@_audited
 def list_argo_floats_by_ocean(ocean_region: FilterValue, limit: Limit = 20) -> list[dict]:
     """List Argo floats last located in a given broad ocean basin (one of:
     Atlantic Ocean, Pacific Ocean, Indian Ocean, Arctic Ocean, Southern
@@ -155,6 +212,7 @@ def list_argo_floats_by_ocean(ocean_region: FilterValue, limit: Limit = 20) -> l
 
 @mcp.tool()
 @_timed
+@_audited
 def list_argo_floats_by_sensor(sensor_code: FilterValue, limit: Limit = 20) -> list[dict]:
     """List Argo floats equipped with a given sensor code (e.g. "DOXY" for
     dissolved oxygen, "CTD_TEMP" for temperature)."""
@@ -163,6 +221,7 @@ def list_argo_floats_by_sensor(sensor_code: FilterValue, limit: Limit = 20) -> l
 
 @mcp.tool()
 @_timed
+@_audited
 def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> list[dict]:
     """List OSO entities of a given type (e.g. "Organization", "Platform",
     "Site", "RegionalFacility"). Use list_oso_entity_types first to see the
@@ -172,6 +231,7 @@ def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> li
 
 @mcp.tool()
 @_timed
+@_audited
 def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Limit = 20) -> list[dict]:
     """List Argo floats operated by a given OSO organization id (e.g.
     "Ifremer") - the cross-source link between the two sources. Find
@@ -181,6 +241,7 @@ def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Li
 
 @mcp.tool()
 @_timed
+@_audited
 def list_seas() -> list[dict]:
     """List every specific named sea present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_sea."""
@@ -189,6 +250,7 @@ def list_seas() -> list[dict]:
 
 @mcp.tool()
 @_timed
+@_audited
 def list_ocean_regions() -> list[dict]:
     """List every broad ocean basin present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_ocean."""
@@ -197,6 +259,7 @@ def list_ocean_regions() -> list[dict]:
 
 @mcp.tool()
 @_timed
+@_audited
 def list_oso_entity_types() -> list[dict]:
     """List every OSO entity type present, with counts. Feeds
     list_oso_entities_by_type."""
@@ -205,6 +268,7 @@ def list_oso_entity_types() -> list[dict]:
 
 @mcp.tool()
 @_timed
+@_audited
 def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[dict]:
     """List distinct values (with counts) for one of a fixed set of useful
     fields: data_center_name, networks, sensor_codes, project_name."""
@@ -213,13 +277,44 @@ def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[dict]:
 
 @mcp.tool()
 @_timed
+@_audited
 def get_index_stats() -> dict:
     """Document counts in the knowledge base, overall and per source. Call
     this first if you're unsure whether the KB has data before searching."""
     return search.index_stats(common_config.ES_INDEX)
 
 
+class _RateLimitMiddleware:
+    """Per-source-IP rate limiting for the whole /mcp endpoint.
+
+    Keyed by IP rather than authenticated caller identity: mcp.run() doesn't
+    expose a hook to insert middleware between its own layers, so this wraps
+    the whole ASGI app from the outside, before the SDK's auth middleware
+    has run. For the small, known set of callers this server expects, IP is
+    a reasonable proxy for caller identity anyway.
+    """
+
+    def __init__(self, app, limiter: RateLimiter):
+        self.app = app
+        self.limiter = limiter
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        client = scope.get("client")
+        key = client[0] if client else "unknown"
+        if not self.limiter.allow(key):
+            response = Response("Rate limit exceeded", status_code=429)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
 if __name__ == "__main__":
+    import uvicorn
+    from starlette.responses import Response
+
     # MCP_HOST is 0.0.0.0 (see kb_mcp.config), so the SDK's own loopback-only
     # auto-enable never kicks in - configure DNS-rebinding protection
     # explicitly instead. allowed_origins stays empty: callers here are
@@ -230,9 +325,11 @@ if __name__ == "__main__":
         allowed_hosts=config.MCP_ALLOWED_HOSTS,
         allowed_origins=[],
     )
-    mcp.run(
-        transport="streamable-http",
-        host=config.MCP_HOST,
-        port=config.MCP_PORT,
-        transport_security=transport_security,
-    )
+    # mcp.run() doesn't take a middleware= kwarg, so the app is built and
+    # wrapped by hand here instead of calling it.
+    app = mcp.streamable_http_app(host=config.MCP_HOST, transport_security=transport_security)
+    limiter = RateLimiter(common_config.RATE_LIMIT_MAX_REQUESTS, common_config.RATE_LIMIT_WINDOW_SECONDS)
+    app = _RateLimitMiddleware(app, limiter)
+
+    uvicorn_config = uvicorn.Config(app, host=config.MCP_HOST, port=config.MCP_PORT)
+    uvicorn.Server(uvicorn_config).run()
