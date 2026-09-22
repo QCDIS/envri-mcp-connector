@@ -6,6 +6,7 @@ mapped fields on top via `extra_properties`.
 """
 import logging
 from datetime import datetime, timezone
+from functools import lru_cache
 
 from elasticsearch import Elasticsearch, helpers
 
@@ -20,7 +21,10 @@ BASE_PROPERTIES = {
 }
 
 
+@lru_cache(maxsize=1)
 def get_client() -> Elasticsearch:
+    """Cached - the client pools its own HTTP connections, so building a new
+    one per search wastes the TCP/TLS handshake for no reason."""
     kwargs = {}
     if config.ES_API_KEY:
         kwargs["api_key"] = config.ES_API_KEY

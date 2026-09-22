@@ -43,6 +43,7 @@ services:
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
       - API_HOST=0.0.0.0
       - API_PORT=8080
+      - LOG_TIMING=${LOG_TIMING:-false}
     ports:
       - "8080:8080"
     healthcheck:
@@ -78,6 +79,7 @@ services:
       - KB_API_URL=http://kb-api:8080
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8765
+      - LOG_TIMING=${LOG_TIMING:-false}
     ports:
       - "8765:8765"
 

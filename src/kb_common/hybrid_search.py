@@ -5,7 +5,7 @@ Combines `knn` + `query` in one Elasticsearch request (native score summing)
 rather than the `retriever`/`rrf` API, which needs a Platinum/Enterprise
 license and 403s on a Basic-license cluster.
 """
-from kb_common import embed, es_index
+from kb_common import embed, es_index, timing
 
 DEFAULT_FIELDS = ("source", "summary_text")
 
@@ -80,8 +80,10 @@ def search(
     `highlights` is the matched fragment(s) of `highlight_field`, wrapped in
     <em> tags - only for terms matched on the lexical side, so it's skipped
     in `knn` mode (pass highlight_field=None to disable outright)."""
-    client = es_index.get_client()
-    vector = embed.embed_query(query)
+    with timing.stage("es_client_init"):
+        client = es_index.get_client()
+    with timing.stage("embed"):
+        vector = embed.embed_query(query)
     kc = knn_clause(vector, k, source)
     fields = list(fields)
 
@@ -105,18 +107,21 @@ def search(
     if highlight:
         search_kwargs["highlight"] = highlight
 
-    if mode == "knn":
-        resp = client.search(knn=kc, **search_kwargs)
-    elif mode == "bm25":
-        resp = client.search(query=lexical_query(query, source), **search_kwargs)
-    else:
-        boosted_kc = knn_clause(vector, hybrid_knn_size(k), source, boost=KNN_HYBRID_BOOST)
-        resp = client.search(knn=boosted_kc, query=lexical_query(query, source), **search_kwargs)
+    with timing.stage("es_query"):
+        if mode == "knn":
+            resp = client.search(knn=kc, **search_kwargs)
+        elif mode == "bm25":
+            resp = client.search(query=lexical_query(query, source), **search_kwargs)
+        else:
+            boosted_kc = knn_clause(vector, hybrid_knn_size(k), source, boost=KNN_HYBRID_BOOST)
+            resp = client.search(knn=boosted_kc, query=lexical_query(query, source), **search_kwargs)
+    timing.record("es_took", resp["took"] / 1000)
 
-    results = []
-    for hit in resp["hits"]["hits"]:
-        result = {"_id": hit["_id"], "score": hit["_score"], **{f: hit["_source"].get(f) for f in fields}}
-        if highlight:
-            result["highlights"] = hit.get("highlight", {}).get(highlight_field, [])
-        results.append(result)
+    with timing.stage("format"):
+        results = []
+        for hit in resp["hits"]["hits"]:
+            result = {"_id": hit["_id"], "score": hit["_score"], **{f: hit["_source"].get(f) for f in fields}}
+            if highlight:
+                result["highlights"] = hit.get("highlight", {}).get(highlight_field, [])
+            results.append(result)
     return results

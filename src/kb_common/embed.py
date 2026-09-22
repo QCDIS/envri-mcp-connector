@@ -2,7 +2,7 @@
 import os
 from functools import lru_cache
 
-from kb_common import config
+from kb_common import config, timing
 
 
 def _model_is_cached(model_name: str) -> bool:
@@ -27,7 +27,8 @@ _E5_QUERY_PREFIX = "query: "
 
 @lru_cache(maxsize=1)
 def get_model() -> SentenceTransformer:
-    return SentenceTransformer(config.EMBEDDING_MODEL, device=config.EMBEDDING_DEVICE)
+    with timing.stage("model_load"):
+        return SentenceTransformer(config.EMBEDDING_MODEL, device=config.EMBEDDING_DEVICE)
 
 
 def embedding_dims() -> int:
