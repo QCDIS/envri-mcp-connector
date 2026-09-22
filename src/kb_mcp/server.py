@@ -56,7 +56,7 @@ def _audited(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         access_token = get_access_token()
-        caller = access_token.client_id if access_token else "unknown"
+        caller = access_token.client_id if access_token else "anonymous"
         log.info("caller=%s tool=%s", caller, fn.__name__)
         return fn(*args, **kwargs)
 
@@ -83,6 +83,19 @@ class StaticBearerTokenVerifier(TokenVerifier):
 # first allowed host since that's already this server's own address.
 _resource_url = f"http://{config.MCP_ALLOWED_HOSTS[0] if config.MCP_ALLOWED_HOSTS else f'localhost:{config.MCP_PORT}'}"
 
+# Read-tier auth is opt-in
+_mcp_auth_kwargs = {}
+if shared_auth.read_auth_enabled():
+    _mcp_auth_kwargs["auth"] = AuthSettings(
+        issuer_url=_resource_url,
+        resource_server_url=_resource_url,
+        required_scopes=["read"],
+        validate_token_resource=False,
+    )
+    _mcp_auth_kwargs["token_verifier"] = StaticBearerTokenVerifier()
+else:
+    log.warning("KB_READ_TOKENS is unset - kb-mcp is accepting unauthenticated requests")
+
 mcp = MCPServer(
     "ifremer-knowledge-base",
     instructions=(
@@ -92,17 +105,7 @@ mcp = MCPServer(
         "language questions; use the list_*/get_index_stats tools first if you "
         "need to know what values exist before filtering."
     ),
-    auth=AuthSettings(
-        issuer_url=_resource_url,
-        resource_server_url=_resource_url,
-        required_scopes=["read"],
-        # Our tokens carry no audience/resource claim of their own - trust
-        # comes from the token set itself being a shared secret, not from
-        # RFC 8707 resource binding - so the SDK's resource-audience check
-        # is explicitly opted out of rather than left to warn/default.
-        validate_token_resource=False,
-    ),
-    token_verifier=StaticBearerTokenVerifier(),
+    **_mcp_auth_kwargs,
 )
 
 Source = Literal["euro_argo", "oso"]

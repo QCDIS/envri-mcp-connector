@@ -18,3 +18,7 @@ MCP_ALLOWED_HOSTS = [
 # instead of importing kb_common.hybrid_search/embed itself, so this process
 # never needs torch/sentence-transformers or a GPU.
 KB_API_URL = os.environ.get("KB_API_URL", "http://localhost:8080")
+
+# The token kb_mcp presents to kb-api's own bearer-token auth (kb_api.auth)
+# when calling /internal/search
+KB_MCP_INTERNAL_TOKEN = os.environ.get("KB_MCP_INTERNAL_TOKEN", "")

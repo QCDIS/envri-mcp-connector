@@ -46,3 +46,9 @@ def verify_read_token(token: str) -> str | None:
 def verify_admin_token(token: str) -> str | None:
     """Caller name if `token` is a valid admin-tier token, else None."""
     return _lookup(_ADMIN_TOKENS, token)
+
+
+def read_auth_enabled() -> bool:
+    """False if KB_READ_TOKENS is unset/empty - read-tier auth is opt-in,
+    unlike the admin tier (KB_ADMIN_TOKENS), which is always required."""
+    return bool(_READ_TOKENS)

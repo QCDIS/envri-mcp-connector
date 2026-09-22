@@ -23,7 +23,11 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)) -> str:
-    """Any valid read- or admin-tier token. Guards /search, /internal/search, /stats."""
+    """Any valid read- or admin-tier token - or, if KB_READ_TOKENS is unset,
+    no token at all (read-tier auth is opt-in; the admin tier stays
+    mandatory regardless, see require_admin_token)."""
+    if not shared_auth.read_auth_enabled():
+        return "anonymous"
     caller = shared_auth.verify_read_token(credentials.credentials) if credentials else None
     if caller is None:
         raise HTTPException(401, "Missing or invalid bearer token", headers={"WWW-Authenticate": "Bearer"})

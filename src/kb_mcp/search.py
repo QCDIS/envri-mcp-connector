@@ -63,6 +63,7 @@ def search(index: str, query: str, k: int = 10, mode: str = "hybrid", source: st
         resp = _session.post(
             f"{config.KB_API_URL}/internal/search",
             json={"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS},
+            headers={"Authorization": f"Bearer {config.KB_MCP_INTERNAL_TOKEN}"},
             timeout=30,
         )
     resp.raise_for_status()
