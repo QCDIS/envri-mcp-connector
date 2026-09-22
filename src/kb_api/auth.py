@@ -23,10 +23,9 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)) -> str:
-    """Any valid read- or admin-tier token - or, if KB_READ_TOKENS is unset,
-    no token at all (read-tier auth is opt-in; the admin tier stays
-    mandatory regardless, see require_admin_token)."""
-    if not shared_auth.read_auth_enabled():
+    """Any valid read- or admin-tier token - or, if KB_SECURITY_ENABLED=false,
+    no token at all. Guards /search, /internal/search, /stats."""
+    if not common_config.SECURITY_ENABLED:
         return "anonymous"
     caller = shared_auth.verify_read_token(credentials.credentials) if credentials else None
     if caller is None:
@@ -35,7 +34,11 @@ def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_be
 
 
 def require_admin_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)) -> str:
-    """Admin-tier token only. Guards /fetch and /index (real GPU ingestion jobs)."""
+    """Admin-tier token only - or, if KB_SECURITY_ENABLED=false, no token at
+    all (same single switch as require_token). Guards /fetch and /index
+    (real GPU ingestion jobs)."""
+    if not common_config.SECURITY_ENABLED:
+        return "anonymous"
     if credentials is not None:
         caller = shared_auth.verify_admin_token(credentials.credentials)
         if caller is not None:

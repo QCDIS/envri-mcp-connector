@@ -83,9 +83,9 @@ class StaticBearerTokenVerifier(TokenVerifier):
 # first allowed host since that's already this server's own address.
 _resource_url = f"http://{config.MCP_ALLOWED_HOSTS[0] if config.MCP_ALLOWED_HOSTS else f'localhost:{config.MCP_PORT}'}"
 
-# Read-tier auth is opt-in
+# KB_SECURITY_ENABLED=false bypasses auth entirely
 _mcp_auth_kwargs = {}
-if shared_auth.read_auth_enabled():
+if common_config.SECURITY_ENABLED:
     _mcp_auth_kwargs["auth"] = AuthSettings(
         issuer_url=_resource_url,
         resource_server_url=_resource_url,
@@ -94,7 +94,7 @@ if shared_auth.read_auth_enabled():
     )
     _mcp_auth_kwargs["token_verifier"] = StaticBearerTokenVerifier()
 else:
-    log.warning("KB_READ_TOKENS is unset - kb-mcp is accepting unauthenticated requests")
+    log.warning("KB_SECURITY_ENABLED=false - kb-mcp is accepting unauthenticated requests")
 
 mcp = MCPServer(
     "ifremer-knowledge-base",
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     # server-to-server (no browser Origin header), and a request with no
     # Origin header at all already passes unconditionally.
     transport_security = TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
+        enable_dns_rebinding_protection=common_config.SECURITY_ENABLED,
         allowed_hosts=config.MCP_ALLOWED_HOSTS,
         allowed_origins=[],
     )

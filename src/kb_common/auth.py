@@ -5,6 +5,10 @@ strings, one per known caller, configured out-of-band (never in git) via
 KB_READ_TOKENS / KB_ADMIN_TOKENS ("name:token,name:token" pairs). An admin
 token is also valid wherever a read token is accepted. Comparison is
 constant-time per entry to avoid a timing side-channel.
+
+kb_common.config.SECURITY_ENABLED (KB_SECURITY_ENABLED=false) is the single
+switch that bypasses these checks entirely - see the call sites in
+kb_api.auth and kb_mcp.server, not this module.
 """
 import os
 import secrets
@@ -46,9 +50,3 @@ def verify_read_token(token: str) -> str | None:
 def verify_admin_token(token: str) -> str | None:
     """Caller name if `token` is a valid admin-tier token, else None."""
     return _lookup(_ADMIN_TOKENS, token)
-
-
-def read_auth_enabled() -> bool:
-    """False if KB_READ_TOKENS is unset/empty - read-tier auth is opt-in,
-    unlike the admin tier (KB_ADMIN_TOKENS), which is always required."""
-    return bool(_READ_TOKENS)

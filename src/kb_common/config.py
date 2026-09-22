@@ -37,3 +37,8 @@ SEAS_SHAPEFILE_PATH = Path(os.environ.get("SEAS_SHAPEFILE_PATH", "data/seas/Worl
 # this many seconds.
 RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
 RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+# Single on/off switch for kb_mcp/kb_api's security layer (kb_common.auth,
+# kb_mcp's Host/Origin check) - on by default. Set to "false" to disable all
+# of it at once: KB_READ_TOKENS, KB_ADMIN_TOKENS and MCP_ALLOWED_HOSTS
+SECURITY_ENABLED = os.environ.get("KB_SECURITY_ENABLED", "true").lower() != "false"
