@@ -7,6 +7,6 @@ torch
 rdflib
 pyshp
 shapely
-mcp>=2
+mcp==2.2.0
 fastapi
 uvicorn

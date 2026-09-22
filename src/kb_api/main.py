@@ -92,8 +92,8 @@ def search(
 
 
 class InternalSearchRequest(BaseModel):
-    query: str
-    k: int = 10
+    query: str = Field(min_length=1)
+    k: int = Field(10, ge=1, le=100)
     mode: str = "hybrid"
     source: str | None = None
     fields: list[str] = list(hybrid_search.DEFAULT_FIELDS)
@@ -118,7 +118,7 @@ def internal_search(req: InternalSearchRequest) -> list[dict]:
 def fetch(
     background_tasks: BackgroundTasks,
     source: Source = Query(..., description="Which source to fetch"),
-    limit: int | None = Query(None, description="euro_argo only: fetch just the first N floats (testing)"),
+    limit: int | None = Query(None, ge=1, description="euro_argo only: fetch just the first N floats (testing)"),
     force: bool = Query(True, description="Re-fetch even if already cached on disk"),
 ) -> dict:
     """Fetch raw source data into the local cache: Euro-Argo float records
@@ -135,7 +135,7 @@ def fetch(
 def index(
     background_tasks: BackgroundTasks,
     source: Source = Query(..., description="Which source to embed and index"),
-    limit: int | None = Query(None, description="Only index the first N records (testing)"),
+    limit: int | None = Query(None, ge=1, description="Only index the first N records (testing)"),
 ) -> dict:
     """Transform, embed and index cached records for one source into
     Elasticsearch. Runs in the background; see server logs for progress."""

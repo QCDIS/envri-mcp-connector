@@ -3,6 +3,17 @@ import os
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.environ.get("MCP_PORT", "8765"))
 
+# Host header values callers are allowed to present, for MCP's DNS-rebinding
+# protection (mcp.server.transport_security.TransportSecuritySettings). The
+# SDK only auto-enables this check when MCP_HOST is a loopback address, which
+# isn't the case here (MCP_HOST=0.0.0.0), so it's configured explicitly below
+# instead. Comma-separated "host:port" entries, "*" for the port allowed.
+MCP_ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("MCP_ALLOWED_HOSTS", "localhost:8765,127.0.0.1:8765").split(",")
+    if h.strip()
+]
+
 # kb_api owns the embedding model; kb_mcp calls its /internal/search route
 # instead of importing kb_common.hybrid_search/embed itself, so this process
 # never needs torch/sentence-transformers or a GPU.

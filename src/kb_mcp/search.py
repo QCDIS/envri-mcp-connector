@@ -7,10 +7,15 @@ kb_common.hybrid_search/embed directly, so kb_mcp never needs torch/
 sentence-transformers or a GPU. Every other function talks to Elasticsearch
 directly via kb_common.es_index and is unaffected.
 """
+import logging
+
 import requests
+from elasticsearch import NotFoundError
 
 from kb_common import es_index, timing
 from kb_mcp import config
+
+log = logging.getLogger(__name__)
 
 _SOURCE_FIELDS = ["source", "summary_text"]
 
@@ -71,8 +76,11 @@ def get_by_id(index: str, doc_id: str) -> dict | None:
     client = es_index.get_client()
     try:
         resp = client.get(index=index, id=doc_id)
-    except Exception:
+    except NotFoundError:
         return None
+    except Exception:
+        log.exception("get_by_id(%r, %r) failed", index, doc_id)
+        raise
     return {"_id": resp["_id"], "url": _source_url(resp["_id"]), **resp["_source"]}
 
 
