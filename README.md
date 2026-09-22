@@ -62,3 +62,4 @@ Prefix with `PYTHONPATH=src`. Flags: `--limit N` (smoke test), `--force` (re-fet
 | `scripts/eval_retrieval.py --index ifremer-knowledge-base` | Top hits for hand-picked queries |
 | `scripts/bench_relevance.py --k 10 --mode hybrid` | precision@k, recall@k, MRR |
 | `scripts/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
+| `scripts/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
