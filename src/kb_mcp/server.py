@@ -7,12 +7,39 @@ All tools operate against the single configured index (kb_common.config.ES_INDEX
 - `index` is not a tool parameter, so the calling AI doesn't need to know or
 guess an internal index name.
 """
+import functools
+import logging
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
 
 from kb_common import config as common_config
+from kb_common import timing
 from kb_mcp import config, search
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+
+
+def _timed(fn):
+    """Wraps an MCP tool to log its total time and per-stage breakdown
+    (populated by kb_common.timing.stage/record calls anywhere in the tool's
+    call stack - notably kb_mcp.search's api_http and kb_api's own stages,
+    surfaced back here via the Server-Timing response header). Set
+    LOG_TIMING=false to skip this entirely."""
+    if not common_config.LOG_TIMING:
+        return fn
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with timing.request() as stages:
+            with timing.stage("tool_total"):
+                result = fn(*args, **kwargs)
+            log.info("tool=%s stages=%s", fn.__name__, {k: round(v, 4) for k, v in stages.items()})
+        return result
+
+    return wrapper
+
 
 mcp = MCPServer(
     "ifremer-knowledge-base",
@@ -30,6 +57,7 @@ FacetField = Literal["data_center_name", "networks", "sensor_codes", "project_na
 
 
 @mcp.tool()
+@_timed
 def search_knowledge_base(query: str, source: Source | None = None, k: int = 10) -> list[dict]:
     """Hybrid semantic + keyword search across the knowledge base. This is the
     primary, general-purpose tool - use it for any open-ended question.
@@ -43,12 +71,14 @@ def search_knowledge_base(query: str, source: Source | None = None, k: int = 10)
 
 
 @mcp.tool()
+@_timed
 def get_argo_float(wmo: str) -> dict | None:
     """Fetch the full record for one Argo float by its WMO id (e.g. "6902919")."""
     return search.get_by_id(common_config.ES_INDEX, f"euro_argo:{wmo}")
 
 
 @mcp.tool()
+@_timed
 def get_oso_entity(oso_id: str) -> dict | None:
     """Fetch the full record for one OSO ontology entity by its id
     (e.g. "Ifremer", "ANTARES") - use search_knowledge_base or the list_oso_*
@@ -57,6 +87,7 @@ def get_oso_entity(oso_id: str) -> dict | None:
 
 
 @mcp.tool()
+@_timed
 def find_argo_floats_near(lat: float, lon: float, radius_km: float = 200, limit: int = 20) -> list[dict]:
     """Find Argo floats within radius_km of a point, based on each float's
     last known position, nearest first."""
@@ -64,6 +95,7 @@ def find_argo_floats_near(lat: float, lon: float, radius_km: float = 200, limit:
 
 
 @mcp.tool()
+@_timed
 def find_argo_floats_in_box(min_lat: float, max_lat: float, min_lon: float, max_lon: float, limit: int = 20) -> list[dict]:
     """Find Argo floats whose last known position falls within a lat/lon
     bounding box - use this instead of find_argo_floats_near when you have a
@@ -72,6 +104,7 @@ def find_argo_floats_in_box(min_lat: float, max_lat: float, min_lon: float, max_
 
 
 @mcp.tool()
+@_timed
 def list_argo_floats_by_sea(sea_area: str, limit: int = 20) -> list[dict]:
     """List Argo floats last located in a given specific named sea (e.g.
     "Mediterranean Sea - Western Basin", "Black Sea", "Gulf of Mexico") - one
@@ -82,6 +115,7 @@ def list_argo_floats_by_sea(sea_area: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_argo_floats_by_ocean(ocean_region: str, limit: int = 20) -> list[dict]:
     """List Argo floats last located in a given broad ocean basin (one of:
     Atlantic Ocean, Pacific Ocean, Indian Ocean, Arctic Ocean, Southern
@@ -91,6 +125,7 @@ def list_argo_floats_by_ocean(ocean_region: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_argo_floats_by_sensor(sensor_code: str, limit: int = 20) -> list[dict]:
     """List Argo floats equipped with a given sensor code (e.g. "DOXY" for
     dissolved oxygen, "CTD_TEMP" for temperature)."""
@@ -98,6 +133,7 @@ def list_argo_floats_by_sensor(sensor_code: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_oso_entities_by_type(entity_type: str, limit: int = 20) -> list[dict]:
     """List OSO entities of a given type (e.g. "Organization", "Platform",
     "Site", "RegionalFacility"). Use list_oso_entity_types first to see the
@@ -106,6 +142,7 @@ def list_oso_entities_by_type(entity_type: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_argo_floats_by_organization(oso_organization_id: str, limit: int = 20) -> list[dict]:
     """List Argo floats operated by a given OSO organization id (e.g.
     "Ifremer") - the cross-source link between the two sources. Find
@@ -114,6 +151,7 @@ def list_argo_floats_by_organization(oso_organization_id: str, limit: int = 20) 
 
 
 @mcp.tool()
+@_timed
 def list_seas() -> list[dict]:
     """List every specific named sea present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_sea."""
@@ -121,6 +159,7 @@ def list_seas() -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_ocean_regions() -> list[dict]:
     """List every broad ocean basin present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_ocean."""
@@ -128,6 +167,7 @@ def list_ocean_regions() -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_oso_entity_types() -> list[dict]:
     """List every OSO entity type present, with counts. Feeds
     list_oso_entities_by_type."""
@@ -135,6 +175,7 @@ def list_oso_entity_types() -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def list_field_values(field: FacetField, limit: int = 50) -> list[dict]:
     """List distinct values (with counts) for one of a fixed set of useful
     fields: data_center_name, networks, sensor_codes, project_name."""
@@ -142,6 +183,7 @@ def list_field_values(field: FacetField, limit: int = 50) -> list[dict]:
 
 
 @mcp.tool()
+@_timed
 def get_index_stats() -> dict:
     """Document counts in the knowledge base, overall and per source. Call
     this first if you're unsure whether the KB has data before searching."""

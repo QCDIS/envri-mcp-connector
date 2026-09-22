@@ -41,8 +41,11 @@ services:
       - ES_INDEX=${ES_INDEX:-ifremer-knowledge-base}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
+      - EMBED_QUERY_BATCH_WINDOW_MS=${EMBED_QUERY_BATCH_WINDOW_MS:-8}
+      - EMBED_QUERY_BATCH_MAX_SIZE=${EMBED_QUERY_BATCH_MAX_SIZE:-32}
       - API_HOST=0.0.0.0
       - API_PORT=8080
+      - LOG_TIMING=${LOG_TIMING:-false}
     ports:
       - "8080:8080"
     healthcheck:
@@ -78,6 +81,7 @@ services:
       - KB_API_URL=http://kb-api:8080
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8765
+      - LOG_TIMING=${LOG_TIMING:-false}
     ports:
       - "8765:8765"
 

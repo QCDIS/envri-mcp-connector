@@ -9,10 +9,15 @@ directly via kb_common.es_index and is unaffected.
 """
 import requests
 
-from kb_common import es_index
+from kb_common import es_index, timing
 from kb_mcp import config
 
 _SOURCE_FIELDS = ["source", "summary_text"]
+
+# Reused across requests instead of a bare `requests.post` per call, so the
+# HTTP connection to kb_api gets pooled/kept-alive rather than
+# TCP-handshaking every search.
+_session = requests.Session()
 
 
 def _source_url(doc_id: str) -> str | None:
@@ -49,11 +54,12 @@ def search(index: str, query: str, k: int = 10, mode: str = "hybrid", source: st
     """Hybrid (default) / knn / bm25 search, via kb_api's /internal/search.
     `mode` is for the eval script's A/B comparisons; the MCP server always
     uses hybrid."""
-    resp = requests.post(
-        f"{config.KB_API_URL}/internal/search",
-        json={"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS},
-        timeout=30,
-    )
+    with timing.stage("api_http"):
+        resp = _session.post(
+            f"{config.KB_API_URL}/internal/search",
+            json={"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS},
+            timeout=30,
+        )
     resp.raise_for_status()
     results = resp.json()
     for result in results:

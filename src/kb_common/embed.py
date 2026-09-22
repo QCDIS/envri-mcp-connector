@@ -1,8 +1,12 @@
 """Local embedding generation via sentence-transformers (runs on GPU if available)."""
 import os
+import queue
+import threading
+import time
+from concurrent.futures import Future
 from functools import lru_cache
 
-from kb_common import config
+from kb_common import config, timing
 
 
 def _model_is_cached(model_name: str) -> bool:
@@ -27,7 +31,8 @@ _E5_QUERY_PREFIX = "query: "
 
 @lru_cache(maxsize=1)
 def get_model() -> SentenceTransformer:
-    return SentenceTransformer(config.EMBEDDING_MODEL, device=config.EMBEDDING_DEVICE)
+    with timing.stage("model_load"):
+        return SentenceTransformer(config.EMBEDDING_MODEL, device=config.EMBEDDING_DEVICE)
 
 
 def embedding_dims() -> int:
@@ -52,7 +57,56 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return _encode(inputs)
 
 
-def embed_query(text: str) -> list[float]:
-    """Embed a search query (query time) - e5 models use a different prefix than passages."""
+def _encode_queries(texts: list[str]) -> list[list[float]]:
     is_e5 = "e5" in config.EMBEDDING_MODEL.lower()
-    return _encode([f"{_E5_QUERY_PREFIX}{text}" if is_e5 else text])[0]
+    inputs = [f"{_E5_QUERY_PREFIX}{t}" if is_e5 else t for t in texts]
+    return _encode(inputs)
+
+
+# Under concurrent search traffic, each request calling embed_query() one at
+# a time serializes the GPU behind per-call Python/tokenizer overhead
+_query_queue: "queue.Queue[tuple[str, Future]]" = queue.Queue()
+_worker_lock = threading.Lock()
+_worker_started = False
+
+
+def _batch_worker() -> None:
+    while True:
+        batch = [_query_queue.get()]
+        deadline = time.monotonic() + config.EMBED_QUERY_BATCH_WINDOW_MS / 1000
+        while len(batch) < config.EMBED_QUERY_BATCH_MAX_SIZE:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                batch.append(_query_queue.get(timeout=remaining))
+            except queue.Empty:
+                break
+
+        try:
+            vectors = _encode_queries([text for text, _ in batch])
+        except Exception as exc:
+            for _, fut in batch:
+                fut.set_exception(exc)
+            continue
+        for (_, fut), vector in zip(batch, vectors):
+            fut.set_result(vector)
+
+
+def _ensure_worker() -> None:
+    global _worker_started
+    if _worker_started:
+        return
+    with _worker_lock:
+        if not _worker_started:
+            threading.Thread(target=_batch_worker, name="embed-query-batcher", daemon=True).start()
+            _worker_started = True
+
+
+def embed_query(text: str) -> list[float]:
+    """Embed a search query (query time)
+    Blocks until a batch this query joins comes back"""
+    _ensure_worker()
+    fut: Future = Future()
+    _query_queue.put((text, fut))
+    return fut.result()

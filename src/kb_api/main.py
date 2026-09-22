@@ -18,7 +18,7 @@ Run directly:
 """
 from typing import Literal
 
-from fastapi import BackgroundTasks, FastAPI, Query
+from fastapi import BackgroundTasks, FastAPI, Query, Request
 from pydantic import BaseModel, Field
 
 from kb_api import config
@@ -26,11 +26,31 @@ from kb_api.format import FIELDS, format_hit
 from kb_argo import fetch as argo_fetch
 from kb_argo import pipeline as argo_pipeline
 from kb_common import config as common_config
-from kb_common import es_index, hybrid_search
+from kb_common import embed, es_index, hybrid_search, timing
 from kb_oso import fetch as oso_fetch
 from kb_oso import pipeline as oso_pipeline
 
 app = FastAPI(title="Ifremer Knowledge Base API")
+
+
+@app.on_event("startup")
+def _warm_embedding_model() -> None:
+    """Loads the model and runs a throwaway query through it at startup
+    instead of on the first search."""
+    embed.embed_query("warmup")
+
+
+@app.middleware("http")
+async def _timing_middleware(request: Request, call_next):
+    if not common_config.LOG_TIMING:
+        return await call_next(request)
+    with timing.request() as stages:
+        with timing.stage("api_total"):
+            response = await call_next(request)
+        response.headers["Server-Timing"] = ", ".join(
+            f'{name};dur={elapsed * 1000:.1f}' for name, elapsed in stages.items()
+        )
+        return response
 
 Source = Literal["euro_argo", "oso"]
 
