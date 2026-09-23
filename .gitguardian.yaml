@@ -1,0 +1,6 @@
+# ggshield / GitGuardian CLI config - https://docs.gitguardian.com/ggshield-docs/configuration
+version: 2
+
+secret:
+  ignored_detectors:
+    - Generic Password
