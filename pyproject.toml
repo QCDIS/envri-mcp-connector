@@ -3,6 +3,7 @@ name = "ifremer-knowledge-base"
 version = "0.1.0"
 description = "Euro-Argo floats + OSO ontology in one Elasticsearch index, embedded for RAG, served via an HTTP API and an MCP server."
 requires-python = ">=3.12"
+license = "Apache-2.0"
 dependencies = [
     "requests==2.34.2",
     "python-dotenv==1.2.3",
@@ -21,12 +22,19 @@ api = [
     "fastapi==0.141.1",
     "uvicorn==0.53.0",
 ]
+dev = [
+    "pytest",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [build-system]
 requires = ["setuptools>=68"]
