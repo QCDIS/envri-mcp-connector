@@ -30,7 +30,7 @@ GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower.
 | Fetch | `python -m kb_argo.pipeline fetch` (cached in `data/cache/argo/raw/`) | `python -m kb_oso.pipeline fetch` (latest `OSO.owl` → `data/cache/oso/oso.owl`) |
 | Index | `python -m kb_argo.pipeline index` | `python -m kb_oso.pipeline index` |
 
-Prefix with `PYTHONPATH=src`. Flags: `--limit N` (smoke test), `--force` (re-fetch).
+Flags: `--limit N` (smoke test), `--force` (re-fetch).
 
 ## API
 
