@@ -27,7 +27,7 @@ data/
 ```
 
 - **`data/seas/`** — tracked and stays in place. `World_Seas_IHO_v3.simplified.pkl` is a simplified/pickled index built from the IHO World Seas v3 shapefile (marineregions.org).
-- **`data/reference/`** — tracked, small, hand-maintained data with no fetch/build step (currently just `sea_to_ocean.json`).
+- **`data/reference/`** — tracked. `sea_to_ocean.json` is a small, hand-maintained lookup with no fetch/build step. `nerc_vocab_cache.json` is committed rather than gitignored because regenerating it needs the NVS turtles.zip export manually downloaded from vocab.nerc.ac.uk first (`PYTHONPATH=src python -m kb_common.nerc_vocab --zip <turtles.zip>` — see `src/kb_common/nerc_vocab.py`); it's not a self-contained fetch, so it's kept in git as a working snapshot.
 - **`data/cache/`** — gitignored. Everything here is reproducible from a documented command and is never committed:
   - `oso/oso.owl` — `PYTHONPATH=src python -m kb_oso.pipeline fetch` (downloads the latest OSO release asset).
   - `argo/raw/` — populated by `PYTHONPATH=src python -m kb_argo.pipeline fetch`; the largest artifact in the repo by far (multi-GB of per-float JSON).

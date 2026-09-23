@@ -17,7 +17,7 @@ from rdflib.namespace import SKOS
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-CACHE_PATH = Path("data/cache/nerc_vocab_cache.json")
+CACHE_PATH = Path("data/reference/nerc_vocab_cache.json")
 
 # Argo sensor `id` codes (e.g. CTD_TEMP) are SeaDataNet R25 device-catalogue
 # concepts, needed regardless of what any particular OSO revision references.
