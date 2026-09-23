@@ -12,6 +12,7 @@ import logging
 from typing import Annotated, Literal
 
 from pydantic import Field
+from starlette.responses import Response
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -279,7 +280,6 @@ class _RateLimitMiddleware:
 
 if __name__ == "__main__":
     import uvicorn
-    from starlette.responses import Response
 
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=common_config.SECURITY_ENABLED,
