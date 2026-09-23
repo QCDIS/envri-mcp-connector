@@ -1,0 +1,14 @@
+.venv/
+.git/
+.env
+.claude/
+
+data/
+
+tests/
+scripts/
+docs/
+__pycache__/
+**/__pycache__/
+*.egg-info/
+.pytest_cache/
