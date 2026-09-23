@@ -67,3 +67,16 @@ Prefix with `PYTHONPATH=src`. Flags: `--limit N` (smoke test), `--force` (re-fet
 | `scripts/eval/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
 
 Operational tools live in `scripts/ops/` (e.g. `scripts/ops/reindex.py`).
+
+## Tests
+
+```bash
+pip install -e .[api,dev]
+pytest
+```
+
+Unit tests under `tests/`, mirroring `src/`'s package layout. Unlike the benchmarks above, these assert pass/fail and hit no live Elasticsearch/network/model - see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## License
+
+[Apache License 2.0](LICENSE).

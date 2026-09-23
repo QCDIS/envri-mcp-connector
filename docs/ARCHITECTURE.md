@@ -32,7 +32,8 @@ data/
   - `oso/oso.owl` — `PYTHONPATH=src python -m kb_oso.pipeline fetch` (downloads the latest OSO release asset).
   - `argo/raw/` — populated by `PYTHONPATH=src python -m kb_argo.pipeline fetch`; the largest artifact in the repo by far (multi-GB of per-float JSON).
 
-## Scripts
+## Scripts and tests
 
 - `scripts/ops/` — operational tools run against a live deployment (e.g. `reindex.py`, for migrating to a new index mapping without recomputing embeddings).
-- `scripts/eval/` — dev-quality tools: retrieval benchmarks and a manual eval script (see the README's Benchmarks table). Not a pass/fail test suite; there is currently no automated test suite or CI in this repo.
+- `scripts/eval/` — dev-quality tools: retrieval benchmarks and a manual eval script (see the README's Benchmarks table). These print results for a human to eyeball, not assertions, and need a live Elasticsearch/API to run against.
+- `tests/` — the pytest suite, mirroring `src/`'s package layout. Unlike `scripts/eval/`, these assert pass/fail and are hermetic: no live Elasticsearch, network, or embedding model. Run with `pytest` from repo root (needs `pip install -e .[api,dev]`). There is no CI configured to run them automatically yet.
