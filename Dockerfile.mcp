@@ -2,11 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements-mcp.txt .
-RUN pip install --no-cache-dir -r requirements-mcp.txt
-
+COPY pyproject.toml .
 COPY src/kb_mcp src/kb_mcp
 COPY src/kb_common src/kb_common
+RUN pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app/src
 

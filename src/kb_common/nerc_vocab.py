@@ -17,7 +17,7 @@ from rdflib.namespace import SKOS
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-CACHE_PATH = Path("data/nerc_vocab_cache.json")
+CACHE_PATH = Path("data/reference/nerc_vocab_cache.json")
 
 # Argo sensor `id` codes (e.g. CTD_TEMP) are SeaDataNet R25 device-catalogue
 # concepts, needed regardless of what any particular OSO revision references.
@@ -57,7 +57,7 @@ def _parse_collection(ttl_bytes: bytes) -> dict:
 
 
 def build_cache(zip_path: Path, owl_path: Path = None, out_path: Path = CACHE_PATH) -> dict:
-    owl_path = owl_path or Path("data/oso/oso.owl")
+    owl_path = owl_path or Path("data/cache/oso/oso.owl")
     needed = discover_needed_collections(owl_path)
     log.info("resolving NERC collections: %s", sorted(needed))
 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zip", default=os.environ.get("NERC_TURTLES_ZIP"), help="Path to the NVS turtles.zip (default: $NERC_TURTLES_ZIP)")
-    parser.add_argument("--owl", default="data/oso/oso.owl", help="OSO owl file to scan for referenced collections")
+    parser.add_argument("--owl", default="data/cache/oso/oso.owl", help="OSO owl file to scan for referenced collections")
     parser.add_argument("--out", default=str(CACHE_PATH))
     args = parser.parse_args()
     if not args.zip:
