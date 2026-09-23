@@ -1,5 +1,6 @@
 .venv
 .claude
 .env
-data/argo
+data/cache
 __pycache__
+*.egg-info

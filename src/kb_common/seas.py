@@ -15,7 +15,7 @@ from kb_common import config
 _SIMPLIFY_TOLERANCE = 0.01
 _CACHE_SUFFIX = ".simplified.pkl"
 
-SEA_TO_OCEAN_PATH = Path("data/sea_to_ocean.json")
+SEA_TO_OCEAN_PATH = Path("data/reference/sea_to_ocean.json")
 
 
 class SeasIndex:
@@ -29,9 +29,6 @@ class SeasIndex:
         reader = shapefile.Reader(str(shp_path))
         names, geoms = [], []
         for sr in reader.shapeRecords():
-            # preserve_topology=False is dramatically faster on this much
-            # input detail; a slightly invalid polygon is fine for
-            # .contains()/.distance() classification.
             geom = shape(sr.shape.__geo_interface__).simplify(_SIMPLIFY_TOLERANCE, preserve_topology=False)
             names.append(sr.record["NAME"])
             geoms.append(geom)

@@ -2,12 +2,7 @@
 
 Euro-Argo floats + OSO ontology in one Elasticsearch index (`source: euro_argo` / `oso`), embedded for RAG, served via an HTTP API and an MCP server.
 
-| Package | Role |
-| --- | --- |
-| `kb_common/` | Config, embedding, ES indexing, hybrid BM25+kNN search |
-| `kb_argo/`, `kb_oso/` | Fetch → transform → embed → index, per source |
-| `kb_api/` | HTTP API (only service needing `torch`/GPU at query time) |
-| `kb_mcp/` | MCP tools; calls `kb_api` for search |
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for package roles and data flow.
 
 ## Security
 
@@ -23,7 +18,7 @@ cp .env.example .env
 sudo sysctl -w vm.max_map_count=262144   # Linux only
 docker compose up -d                     # Elasticsearch on :9200, API on :8080, MCP on :8765
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .[api]   # kb-mcp only needs `pip install -e .` (no torch/GPU deps)
 ```
 
 GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower.
@@ -32,7 +27,7 @@ GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower.
 
 | Step | Euro-Argo | OSO |
 | --- | --- | --- |
-| Fetch | `python -m kb_argo.pipeline fetch` (cached in `data/argo/raw/`) | `python -m kb_oso.pipeline fetch` (latest `OSO.owl` → `data/oso/oso.owl`) |
+| Fetch | `python -m kb_argo.pipeline fetch` (cached in `data/cache/argo/raw/`) | `python -m kb_oso.pipeline fetch` (latest `OSO.owl` → `data/cache/oso/oso.owl`) |
 | Index | `python -m kb_argo.pipeline index` | `python -m kb_oso.pipeline index` |
 
 Prefix with `PYTHONPATH=src`. Flags: `--limit N` (smoke test), `--force` (re-fetch).
@@ -66,7 +61,9 @@ Prefix with `PYTHONPATH=src`. Flags: `--limit N` (smoke test), `--force` (re-fet
 
 | Script | Measures |
 | --- | --- |
-| `scripts/eval_retrieval.py --index ifremer-knowledge-base` | Top hits for hand-picked queries |
-| `scripts/bench_relevance.py --k 10 --mode hybrid` | precision@k, recall@k, MRR |
-| `scripts/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
-| `scripts/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
+| `scripts/eval/eval_retrieval.py --index ifremer-knowledge-base` | Top hits for hand-picked queries |
+| `scripts/eval/bench_relevance.py --k 10 --mode hybrid` | precision@k, recall@k, MRR |
+| `scripts/eval/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
+| `scripts/eval/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
+
+Operational tools live in `scripts/ops/` (e.g. `scripts/ops/reindex.py`).

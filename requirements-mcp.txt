@@ -1,4 +1,0 @@
-requests
-python-dotenv
-elasticsearch>=8.15,<9
-mcp==2.2.0

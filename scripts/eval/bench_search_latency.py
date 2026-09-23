@@ -3,7 +3,7 @@ header (see kb_common.timing / LOG_TIMING) to break latency down by stage -
 per query, and under concurrent load.
 
 Usage:
-    python scripts/bench_search_latency.py [--base-url http://localhost:8080]
+    python scripts/eval/bench_search_latency.py [--base-url http://localhost:8080]
         [--repeats 5] [--limit 10] [--concurrency 1,4,8] [--queries "a,b,c"]
 """
 import argparse

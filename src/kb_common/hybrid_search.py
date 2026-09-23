@@ -1,5 +1,5 @@
 """Core hybrid (BM25 + kNN) search query, used by kb_api - kb_mcp and
-scripts/eval_retrieval.py reach it over HTTP via kb_api's /internal/search.
+scripts/eval/eval_retrieval.py reach it over HTTP via kb_api's /internal/search.
 
 Combines `knn` + `query` in one Elasticsearch request (native score summing)
 """

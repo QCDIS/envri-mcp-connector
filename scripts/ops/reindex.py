@@ -5,15 +5,15 @@ for completion, since a synchronous wait can outlive the HTTP client's
 timeout even though the task is still running fine server-side.
 
 Usage:
-    PYTHONPATH=src python scripts/reindex.py --dest ifremer-knowledge-base-v2
-    PYTHONPATH=src python scripts/reindex.py --source foo --dest bar --dims 1024
+    PYTHONPATH=src python scripts/ops/reindex.py --dest ifremer-knowledge-base-v2
+    PYTHONPATH=src python scripts/ops/reindex.py --source foo --dest bar --dims 1024
 """
 import argparse
 import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from kb_argo import es_mapping as argo_mapping
 from kb_common import config, es_index
