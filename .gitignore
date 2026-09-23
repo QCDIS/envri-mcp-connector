@@ -1,6 +1,11 @@
 .venv
-.claude
 .env
 data/cache
 __pycache__
 *.egg-info
+.pytest_cache
+
+.vscode
+.idea
+*.swp
+.DS_Store
