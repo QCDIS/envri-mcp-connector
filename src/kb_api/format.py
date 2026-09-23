@@ -30,8 +30,6 @@ def format_hit(hit: dict) -> dict:
         "header": header,
         "vector": hit.get("embedding"),
         "summary": hit.get("summary_text"),
-        # Matched fragment(s) of `summary`, empty if nothing lexical matched.
         "highlight": hit.get("highlights") or [],
-        # None until documents predating this field are re-ingested.
         "last_modified": hit.get("indexed_at"),
     }

@@ -9,6 +9,13 @@ Euro-Argo floats + OSO ontology in one Elasticsearch index (`source: euro_argo` 
 | `kb_api/` | HTTP API (only service needing `torch`/GPU at query time) |
 | `kb_mcp/` | MCP tools; calls `kb_api` for search |
 
+## Security
+
+- Bearer token required on every route except `/health` - `KB_READ_TOKENS` / `KB_ADMIN_TOKENS` in `.env` (`name:token`, generate with `python -c "import secrets; print(secrets.token_hex(32))"`)
+- `KB_ADMIN_TOKENS` additionally gates `/fetch` and `/index` (real ingestion jobs)
+- `MCP_ALLOWED_HOSTS` restricts which `Host` header `kb-mcp` accepts
+- `KB_SECURITY_ENABLED=false` disables all of the above at once - local testing only
+
 ## Setup
 
 ```bash

@@ -1,7 +1,5 @@
 """Per-request stage timing: `stage()` measures a block's wall-clock time
-and, if a `request()` scope is open, accumulates it into a per-request dict
-so callers can log or expose a single request's stage breakdown (e.g.
-kb_api's `Server-Timing` header, kb_mcp's end-of-tool log line).
+and, if a `request()` scope is open
 """
 import time
 from contextlib import contextmanager

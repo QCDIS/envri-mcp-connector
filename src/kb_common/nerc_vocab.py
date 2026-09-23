@@ -1,10 +1,5 @@
 """Resolve NERC NVS (vocab.nerc.ac.uk) concept URIs to human-readable labels.
 
-The full NVS Turtle export is large (~180MB across hundreds of collections),
-but any dataset here only references a handful. Extracts just the needed
-`{CODE}.ttl` members from the zip (no full unzip) and caches labels to a
-small JSON file that travels with `data/` to wherever ingestion runs.
-
 Usage (run locally, where the NVS turtles zip lives):
     PYTHONPATH=src python -m kb_common.nerc_vocab --zip /path/to/turtles.zip
 """

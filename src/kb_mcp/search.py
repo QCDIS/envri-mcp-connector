@@ -1,29 +1,24 @@
-"""Query functions shared between the MCP server (kb_mcp.server) and the
-dev eval script (scripts/eval_retrieval.py). Each function returns plain
-Python data, not raw ES response bodies.
-
-`search()` calls kb_api's /internal/search over HTTP instead of importing
-kb_common.hybrid_search/embed directly, so kb_mcp never needs torch/
-sentence-transformers or a GPU. Every other function talks to Elasticsearch
-directly via kb_common.es_index and is unaffected.
+"""`search()` calls kb_api's /internal/search over HTTP.
+Every other function talks to Elasticsearch directly via kb_common.es_index.
 """
+import logging
+
 import requests
+from elasticsearch import NotFoundError
 
 from kb_common import es_index, timing
 from kb_mcp import config
 
+log = logging.getLogger(__name__)
+
 _SOURCE_FIELDS = ["source", "summary_text"]
 
-# Reused across requests instead of a bare `requests.post` per call, so the
-# HTTP connection to kb_api gets pooled/kept-alive rather than
-# TCP-handshaking every search.
 _session = requests.Session()
 
 
 def _source_url(doc_id: str) -> str | None:
-    """Dereferenceable link to the original data source (not this project),
-    mirroring kb_api.format's url mapping - kept in sync manually since
-    kb_mcp no longer imports kb_api."""
+    """Dereferenceable link to the original data source,
+    mirroring kb_api.format's url mapping"""
     source, _, local_id = doc_id.partition(":")
     if source == "euro_argo":
         return f"https://fleetmonitoring.euro-argo.eu/float/{local_id}"
@@ -31,10 +26,7 @@ def _source_url(doc_id: str) -> str | None:
         return f"https://w3id.org/earthsemantics/OSO#{local_id}"
     return None
 
-# Fields safe to expose via the generic list_field_values facet tool: the
-# friendly name (what the tool's enum offers) mapped to the actual
-# aggregatable ES field (text fields need their .keyword sub-field for
-# aggregations - plain keyword fields don't).
+
 FACETABLE_FIELDS = {
     "data_center_name": "data_center_name.keyword",
     "networks": "networks",
@@ -58,6 +50,7 @@ def search(index: str, query: str, k: int = 10, mode: str = "hybrid", source: st
         resp = _session.post(
             f"{config.KB_API_URL}/internal/search",
             json={"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS},
+            headers={"Authorization": f"Bearer {config.KB_MCP_INTERNAL_TOKEN}"},
             timeout=30,
         )
     resp.raise_for_status()
@@ -71,8 +64,11 @@ def get_by_id(index: str, doc_id: str) -> dict | None:
     client = es_index.get_client()
     try:
         resp = client.get(index=index, id=doc_id)
-    except Exception:
+    except NotFoundError:
         return None
+    except Exception:
+        log.exception("get_by_id(%r, %r) failed", index, doc_id)
+        raise
     return {"_id": resp["_id"], "url": _source_url(resp["_id"]), **resp["_source"]}
 
 

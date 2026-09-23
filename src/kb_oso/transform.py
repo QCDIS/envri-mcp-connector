@@ -1,11 +1,4 @@
-"""Turn OSO ontology individuals into KB documents.
-
-OSO is an RDF/OWL ontology (SKOS-labelled individuals connected by custom
-object/data properties), a fundamentally different shape from the Argo JSON
-records. Rather than a per-type template, this builds a generic label index
-and renders each individual's properties into a natural-language summary,
-regardless of its rdf:type.
-"""
+"""Turn OSO ontology individuals into KB documents."""
 import argparse
 import json
 import re

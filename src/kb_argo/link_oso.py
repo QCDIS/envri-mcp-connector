@@ -1,9 +1,5 @@
 """Match Argo institution/owner/data-center names against OSO Organization
-individuals - organization-level only (Argo floats drift across ocean basins
-while OSO sites are fixed, so per-float geolocation linking isn't
-meaningful), via conservative exact/substring matching on normalized labels -
-no fuzzy/edit-distance scoring, since that would need manual curation to
-trust.
+individuals
 """
 import argparse
 import re

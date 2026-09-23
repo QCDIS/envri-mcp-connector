@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       - discovery.type=single-node
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
       - xpack.security.enabled=true
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -17,9 +17,9 @@ services:
     volumes:
       - esdata:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf -u elastic:$${ELASTIC_PASSWORD:-changeme} http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -37,7 +37,7 @@ services:
     environment:
       - ES_URL=http://elasticsearch:9200
       - ES_USERNAME=elastic
-      - ES_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - ES_PASSWORD=${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
       - ES_INDEX=${ES_INDEX:-ifremer-knowledge-base}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
@@ -46,6 +46,11 @@ services:
       - API_HOST=0.0.0.0
       - API_PORT=8080
       - LOG_TIMING=${LOG_TIMING:-false}
+      - KB_SECURITY_ENABLED=${KB_SECURITY_ENABLED:-true}
+      - KB_READ_TOKENS=${KB_READ_TOKENS:-}
+      - KB_ADMIN_TOKENS=${KB_ADMIN_TOKENS:-}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-60}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "8080:8080"
     healthcheck:
@@ -76,12 +81,19 @@ services:
     environment:
       - ES_URL=http://elasticsearch:9200
       - ES_USERNAME=elastic
-      - ES_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - ES_PASSWORD=${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
       - ES_INDEX=${ES_INDEX:-ifremer-knowledge-base}
       - KB_API_URL=http://kb-api:8080
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8765
       - LOG_TIMING=${LOG_TIMING:-false}
+      - KB_SECURITY_ENABLED=${KB_SECURITY_ENABLED:-true}
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-localhost:8765,127.0.0.1:8765}
+      - KB_READ_TOKENS=${KB_READ_TOKENS:-}
+      - KB_ADMIN_TOKENS=${KB_ADMIN_TOKENS:-}
+      - KB_MCP_INTERNAL_TOKEN=${KB_MCP_INTERNAL_TOKEN:-}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-60}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "8765:8765"
 

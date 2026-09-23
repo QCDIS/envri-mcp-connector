@@ -1,14 +1,4 @@
-"""Sea/ocean classification via point-in-polygon lookup against the IHO
-World Seas v3 dataset (marineregions.org) - 101 real named-sea boundaries
-(Black Sea, Mediterranean Sea - Western/Eastern Basin, ...) instead of a
-crude five-bucket lat/lon heuristic, at the same granularity OSO's own
-regional facilities are described at.
-
-The source shapefile is ~150MB of full-resolution coastline detail - massive
-overkill for offshore float positions, and slow to parse (~2.5min). The
-first call simplifies the geometries and caches them to a small pickle file;
-every call after loads in well under a second.
-"""
+"""Sea/ocean classification via point-in-polygon lookup"""
 import json
 import pickle
 from functools import lru_cache

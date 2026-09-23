@@ -1,27 +1,15 @@
 """HTTP API exposing the knowledge base's hybrid search as plain JSON.
 
-Two search routes, deliberately different contracts:
-- `GET /search`: fixed public shape (score/url/header/vector/summary/
-  highlight/last_modified) - e.g. for a downstream system doing its own
-  vector re-ranking.
-- `POST /internal/search`: unshaped passthrough to
-  kb_common.hybrid_search.search(), used by kb_mcp so it can search without
-  loading the embedding model itself.
-
-`POST /fetch` and `POST /index` trigger the ingestion pipeline (fetch raw
-Euro-Argo records, then embed and index cached records into Elasticsearch).
-Both run in the background and return immediately - watch server logs for
-progress. `GET /stats` reports document counts, overall and per source.
-
 Run directly:
     PYTHONPATH=src python -m kb_api.main
 """
 from typing import Literal
 
-from fastapi import BackgroundTasks, FastAPI, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Query, Request
 from pydantic import BaseModel, Field
 
 from kb_api import config
+from kb_api.auth import rate_limited, rate_limited_admin
 from kb_api.format import FIELDS, format_hit
 from kb_argo import fetch as argo_fetch
 from kb_argo import pipeline as argo_pipeline
@@ -86,14 +74,15 @@ def search(
     source: Source | None = Query(
         None, description="Restrict results to one source: Euro-Argo float metadata or the OSO ontology"
     ),
+    _caller: str = Depends(rate_limited),
 ) -> list[dict]:
     hits = hybrid_search.search(common_config.ES_INDEX, query, k=limit, source=source, fields=FIELDS)
     return [format_hit(hit) for hit in hits]
 
 
 class InternalSearchRequest(BaseModel):
-    query: str
-    k: int = 10
+    query: str = Field(min_length=1)
+    k: int = Field(10, ge=1, le=100)
     mode: str = "hybrid"
     source: str | None = None
     fields: list[str] = list(hybrid_search.DEFAULT_FIELDS)
@@ -101,7 +90,7 @@ class InternalSearchRequest(BaseModel):
 
 
 @app.post("/internal/search")
-def internal_search(req: InternalSearchRequest) -> list[dict]:
+def internal_search(req: InternalSearchRequest, _caller: str = Depends(rate_limited)) -> list[dict]:
     """Used by kb_mcp only - not the public search contract, see module docstring."""
     return hybrid_search.search(
         common_config.ES_INDEX,
@@ -118,8 +107,9 @@ def internal_search(req: InternalSearchRequest) -> list[dict]:
 def fetch(
     background_tasks: BackgroundTasks,
     source: Source = Query(..., description="Which source to fetch"),
-    limit: int | None = Query(None, description="euro_argo only: fetch just the first N floats (testing)"),
+    limit: int | None = Query(None, ge=1, description="euro_argo only: fetch just the first N floats (testing)"),
     force: bool = Query(True, description="Re-fetch even if already cached on disk"),
+    _caller: str = Depends(rate_limited_admin),
 ) -> dict:
     """Fetch raw source data into the local cache: Euro-Argo float records
     from the upstream API, or the OSO ontology OWL file from its GitHub
@@ -135,7 +125,8 @@ def fetch(
 def index(
     background_tasks: BackgroundTasks,
     source: Source = Query(..., description="Which source to embed and index"),
-    limit: int | None = Query(None, description="Only index the first N records (testing)"),
+    limit: int | None = Query(None, ge=1, description="Only index the first N records (testing)"),
+    _caller: str = Depends(rate_limited_admin),
 ) -> dict:
     """Transform, embed and index cached records for one source into
     Elasticsearch. Runs in the background; see server logs for progress."""
@@ -145,7 +136,7 @@ def index(
 
 
 @app.get("/stats", response_model=Stats)
-def stats() -> dict:
+def stats(_caller: str = Depends(rate_limited)) -> dict:
     """Document counts in the knowledge base, overall and per source."""
     return es_index.index_stats(common_config.ES_INDEX)
 

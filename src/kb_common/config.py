@@ -31,3 +31,14 @@ LOG_TIMING = os.environ.get("LOG_TIMING", "true").lower() != "false"
 # IHO World Seas v3 (marineregions.org) - used by kb_common.seas for real
 # named-sea classification instead of a lat/lon bounding-box heuristic.
 SEAS_SHAPEFILE_PATH = Path(os.environ.get("SEAS_SHAPEFILE_PATH", "data/seas/World_Seas_IHO_v3.shp"))
+
+# Per-caller (kb_api) / per-source-IP (kb_mcp) rate limit - see
+# kb_common.ratelimit. A sliding window: at most this many requests per
+# this many seconds.
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
+RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+# Single on/off switch for kb_mcp/kb_api's security layer (kb_common.auth,
+# kb_mcp's Host/Origin check) - on by default. Set to "false" to disable all
+# of it at once: KB_READ_TOKENS, KB_ADMIN_TOKENS and MCP_ALLOWED_HOSTS
+SECURITY_ENABLED = os.environ.get("KB_SECURITY_ENABLED", "true").lower() != "false"
