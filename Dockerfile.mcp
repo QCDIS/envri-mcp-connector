@@ -1,11 +1,14 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /usr/local/bin/uv
+
 WORKDIR /app
 
 COPY pyproject.toml .
+RUN uv pip install --system --no-cache -r pyproject.toml
+
 COPY src/kb_mcp src/kb_mcp
 COPY src/kb_common src/kb_common
-RUN pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app/src
 

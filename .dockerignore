@@ -3,7 +3,7 @@
 .env
 .claude/
 
-data/
+data/cache
 
 tests/
 scripts/
