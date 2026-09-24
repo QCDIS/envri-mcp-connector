@@ -5,7 +5,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /usr/local/bin/uv
 WORKDIR /app
 
 RUN uv pip install --system --no-cache torch \
-    --index-url https://download.pytorch.org/whl/cu132
+    --index-url https://download.pytorch.org/whl/cu124
 
 COPY pyproject.toml .
 RUN uv pip install --system --no-cache -r pyproject.toml --extra api
