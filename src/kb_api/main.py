@@ -3,6 +3,7 @@
 Run directly:
     PYTHONPATH=src python -m kb_api.main
 """
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Query, Request
@@ -21,14 +22,16 @@ from kb_oso import pipeline as oso_pipeline
 
 setup_logging()
 
-app = FastAPI(title="Ifremer Knowledge Base API")
 
-
-@app.on_event("startup")
-def _warm_embedding_model() -> None:
-    """Loads the model and runs a throwaway query through it at startup
-    instead of on the first search."""
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Loads the embedding model and runs a throwaway query through it at
+    startup instead of on the first search."""
     embed.embed_query("warmup")
+    yield
+
+
+app = FastAPI(title="Ifremer Knowledge Base API", lifespan=_lifespan)
 
 
 @app.middleware("http")
