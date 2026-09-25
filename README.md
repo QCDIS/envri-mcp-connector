@@ -14,14 +14,44 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for package roles and data flow
 ## Setup
 
 ```bash
-cp .env.example .env
-sudo sysctl -w vm.max_map_count=262144   # Linux only
-docker compose up -d                     # Elasticsearch on :9200, API on :8080, MCP on :8765
-python -m venv .venv && source .venv/bin/activate
-pip install -e .[api]   # kb-mcp only needs `pip install -e .` (no torch/GPU deps)
+cp .env.example .env    # set ELASTIC_PASSWORD, tokens, etc.
 ```
 
-GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower.
+GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower. Python ≥ 3.12 for local installs.
+
+### Docker
+
+Runs everything: Elasticsearch (:9200), API (:8080), MCP (:8765). `kb-api` needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) for GPU access.
+
+```bash
+docker compose up -d --build
+```
+
+### pip
+
+Start Elasticsearch with `docker compose up -d elasticsearch` (or point `ES_URL` at your own cluster), then:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .[api]   # kb-mcp alone only needs `pip install -e .` (no torch/GPU deps)
+python -m kb_api.main   # API on :8080
+python -m kb_mcp.server # MCP on :8765
+```
+
+For a specific CUDA build of torch, install it first: `pip install torch --index-url https://download.pytorch.org/whl/cu124`.
+
+### uv
+
+Same as pip, with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e .[api]   # or `uv pip install -e .` for kb-mcp only
+python -m kb_api.main
+python -m kb_mcp.server
+```
+
+For a specific CUDA build of torch: `uv pip install torch --index-url https://download.pytorch.org/whl/cu124`.
 
 ## Ingest
 
