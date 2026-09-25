@@ -35,8 +35,8 @@ SEAS_SHAPEFILE_PATH = Path(os.environ.get("SEAS_SHAPEFILE_PATH", "data/seas/Worl
 # Per-caller (kb_api) / per-source-IP (kb_mcp) rate limit - see
 # kb_common.ratelimit. A sliding window: at most this many requests per
 # this many seconds.
-RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
-RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "250"))
+RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "250"))
 
 # Single on/off switch for kb_mcp/kb_api's security layer (kb_common.auth,
 # kb_mcp's Host/Origin check) - on by default. Set to "false" to disable all
