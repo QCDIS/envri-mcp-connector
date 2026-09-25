@@ -10,8 +10,8 @@ import logging
 import requests
 
 from kb_oso import config
+from kb_common.logs import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 
@@ -31,6 +31,7 @@ def fetch_all(url: str = None, dest=None, force: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     parser = argparse.ArgumentParser(description="Fetch the OSO ontology OWL file")
     parser.add_argument("--force", action="store_true", help="Re-fetch even if already cached on disk")
     args = parser.parse_args()

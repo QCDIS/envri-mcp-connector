@@ -13,8 +13,8 @@ import requests
 from tqdm import tqdm
 
 from kb_argo import config
+from kb_common.logs import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 session = requests.Session()
@@ -69,6 +69,7 @@ def fetch_all(raw_dir=None, workers=None, limit: int | None = None, force: bool 
 
 
 if __name__ == "__main__":
+    setup_logging()
     parser = argparse.ArgumentParser(description="Fetch Argo float records from Euro-Argo API")
     parser.add_argument("--limit", type=int, default=None, help="Only fetch the first N floats (testing)")
     parser.add_argument("--force", action="store_true", help="Re-fetch even if cached on disk")

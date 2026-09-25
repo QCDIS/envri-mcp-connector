@@ -28,6 +28,15 @@ EMBED_QUERY_BATCH_MAX_SIZE = int(os.environ.get("EMBED_QUERY_BATCH_MAX_SIZE", "3
 # Server-Timing header) - on by default, set to "false" to silence it.
 LOG_TIMING = os.environ.get("LOG_TIMING", "true").lower() != "false"
 
+# Root log level for every entrypoint - see kb_common.logs.setup_logging.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+# Request paths whose uvicorn access-log lines are dropped (comma-separated,
+# matched against the path without its query string)
+LOG_EXCLUDE_PATHS = frozenset(
+    p.strip() for p in os.environ.get("LOG_EXCLUDE_PATHS", "/health").split(",") if p.strip()
+)
+
 # IHO World Seas v3 (marineregions.org) - used by kb_common.seas for real
 # named-sea classification instead of a lat/lon bounding-box heuristic.
 SEAS_SHAPEFILE_PATH = Path(os.environ.get("SEAS_SHAPEFILE_PATH", "data/seas/World_Seas_IHO_v3.shp"))

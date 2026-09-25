@@ -15,8 +15,11 @@ from kb_argo import fetch as argo_fetch
 from kb_argo import pipeline as argo_pipeline
 from kb_common import config as common_config
 from kb_common import embed, es_index, hybrid_search, timing
+from kb_common.logs import setup_logging
 from kb_oso import fetch as oso_fetch
 from kb_oso import pipeline as oso_pipeline
+
+setup_logging()
 
 app = FastAPI(title="Ifremer Knowledge Base API")
 
@@ -149,4 +152,4 @@ def health() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=config.API_HOST, port=config.API_PORT)
+    uvicorn.run(app, host=config.API_HOST, port=config.API_PORT, log_config=None)

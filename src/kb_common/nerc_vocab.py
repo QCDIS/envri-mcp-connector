@@ -14,7 +14,8 @@ from pathlib import Path
 import rdflib
 from rdflib.namespace import SKOS
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+from kb_common.logs import setup_logging
+
 log = logging.getLogger(__name__)
 
 CACHE_PATH = Path("data/reference/nerc_vocab_cache.json")
@@ -98,6 +99,7 @@ def get_definition(uri: str) -> str | None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     import os
 
     parser = argparse.ArgumentParser(description=__doc__)

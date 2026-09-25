@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from kb_argo import es_mapping, fetch, transform
 from kb_common import config, embed, es_index
+from kb_common.logs import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 CHUNK_SIZE = 256
@@ -53,6 +53,7 @@ def run_index(limit: int | None = None):
 
 
 if __name__ == "__main__":
+    setup_logging()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 

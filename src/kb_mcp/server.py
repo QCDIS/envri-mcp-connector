@@ -23,10 +23,13 @@ from mcp.server.transport_security import TransportSecuritySettings
 from kb_common import auth as shared_auth
 from kb_common import config as common_config
 from kb_common import timing
+from kb_common.logs import setup_logging
 from kb_common.ratelimit import RateLimiter
 from kb_mcp import config, search
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# Must run before MCPServer() below, whose own configure_logging() is a
+# no-op only if the root logger already has a handler.
+setup_logging()
 log = logging.getLogger(__name__)
 
 
@@ -291,5 +294,5 @@ if __name__ == "__main__":
     limiter = RateLimiter(common_config.RATE_LIMIT_MAX_REQUESTS, common_config.RATE_LIMIT_WINDOW_SECONDS)
     app = _RateLimitMiddleware(app, limiter)
 
-    uvicorn_config = uvicorn.Config(app, host=config.MCP_HOST, port=config.MCP_PORT)
+    uvicorn_config = uvicorn.Config(app, host=config.MCP_HOST, port=config.MCP_PORT, log_config=None)
     uvicorn.Server(uvicorn_config).run()
