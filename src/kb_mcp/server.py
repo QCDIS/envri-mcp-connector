@@ -281,8 +281,22 @@ class _RateLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+def _assert_startup_hosts() -> None:
+    """Refuse to start on a guaranteed-broken security configuration.
+    """
+    if not common_config.SECURITY_ENABLED:
+        return
+    if not config.MCP_ALLOWED_HOSTS:
+        raise SystemExit(
+            "KB_SECURITY_ENABLED=true but MCP_ALLOWED_HOSTS parsed to an empty list."
+            "Set MCP_ALLOWED_HOSTS to at least one host "
+            "(e.g. 'localhost:8765,127.0.0.1:8765') or set KB_SECURITY_ENABLED=false."
+        )
+
 if __name__ == "__main__":
     import uvicorn
+
+    _assert_startup_hosts()
 
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=common_config.SECURITY_ENABLED,

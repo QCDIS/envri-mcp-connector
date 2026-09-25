@@ -151,6 +151,31 @@ def test_security_disabled_skips_auth_entirely(monkeypatch):
         _reload_server_with_security(monkeypatch, enabled=True)
 
 
+# --- _assert_startup_hosts: empty MCP_ALLOWED_HOSTS + security = 421 outage ---
+
+
+def test_empty_allowed_hosts_with_security_refuses_to_start(monkeypatch):
+    monkeypatch.setattr(server.common_config, "SECURITY_ENABLED", True)
+    monkeypatch.setattr(server.config, "MCP_ALLOWED_HOSTS", [])
+
+    with pytest.raises(SystemExit):
+        server._assert_startup_hosts()
+
+
+def test_allowed_hosts_with_security_starts(monkeypatch):
+    monkeypatch.setattr(server.common_config, "SECURITY_ENABLED", True)
+    monkeypatch.setattr(server.config, "MCP_ALLOWED_HOSTS", ["localhost:8765"])
+
+    server._assert_startup_hosts()  # must not raise
+
+
+def test_empty_allowed_hosts_with_security_disabled_starts(monkeypatch):
+    monkeypatch.setattr(server.common_config, "SECURITY_ENABLED", False)
+    monkeypatch.setattr(server.config, "MCP_ALLOWED_HOSTS", [])
+
+    server._assert_startup_hosts()  # must not raise
+
+
 # --- _RateLimitMiddleware ---
 
 
