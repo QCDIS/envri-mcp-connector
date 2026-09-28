@@ -66,6 +66,7 @@ def index_stats(index: str = None) -> dict:
         index=index,
         size=0,
         aggs={"by_source": {"terms": {"field": "source", "size": 10}}},
+        track_total_hits=True,
     )
     total = resp["hits"]["total"]["value"]
     by_source = {b["key"]: b["doc_count"] for b in resp["aggregations"]["by_source"]["buckets"]}
