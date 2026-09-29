@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from kb_argo import config, link_oso, parameters
+from kb_argo import config, link_oso
 from kb_common import nerc_vocab, seas
 
 log = logging.getLogger(__name__)
