@@ -1,6 +1,6 @@
 # Benchmarks
 
-All scripts live in `scripts/benchmarks`, need a live Elasticsearch (and, for the latency benchmark, a running `kb_api`), and **print results for a human to read, none of them assert pass/fail.**
+All scripts live in `scripts/benchmarks`, need a live Elasticsearch (and, for the latency benchmark, a running `kb_api`) and print results, **none of them assert pass/fail.**
 
 ## Setup the reference numbers were measured on
 

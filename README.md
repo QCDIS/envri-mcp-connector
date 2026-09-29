@@ -96,7 +96,7 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 | `scripts/benchmarks/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
 | `scripts/benchmarks/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
 
-Operational tools live in `scripts/ops/` (e.g. `scripts/ops/reindex.py`).
+See more in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Tests
 
@@ -105,7 +105,7 @@ pip install -e .[api,dev]
 pytest
 ```
 
-Unit tests under `tests/`, mirroring `src/`'s package layout. Unlike the benchmarks above, these assert pass/fail and hit no live Elasticsearch/network/model - see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Unit tests under `tests/`, mirroring `src/`'s package layout. Unlike the benchmarks above, these assert pass/fail and hit no live Elasticsearch/network/model.
 
 ## License
 
