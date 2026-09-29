@@ -4,6 +4,11 @@ recomputing anything. Runs Elasticsearch's _reindex asynchronously and polls
 for completion, since a synchronous wait can outlive the HTTP client's
 timeout even though the task is still running fine server-side.
 
+The destination mapping comes from kb_common.es_index.build_mapping, so it
+includes the `lowercase` normalizer settings and every case-insensitive keyword
+field; after copying, a check confirms case variants of a real value match the
+same documents.
+
 Usage:
     PYTHONPATH=src python scripts/ops/reindex.py --dest ifremer-knowledge-base-v2
     PYTHONPATH=src python scripts/ops/reindex.py --source foo --dest bar --dims 1024
@@ -34,6 +39,29 @@ def get_dims(client, source_index: str, explicit: int | None) -> int:
     mapping = client.indices.get_mapping(index=source_index)
     props = next(iter(mapping.values()))["mappings"]["properties"]
     return props["embedding"]["dims"]
+
+
+def verify_case_insensitive(client, dest: str) -> bool:
+    """Take a real sea_area value and confirm lower/upper/original casing all
+    match the same number of documents on the normalized sea_area.keyword."""
+    resp = client.search(
+        index=dest,
+        size=1,
+        query={"exists": {"field": "sea_area"}},
+        source=["sea_area"],
+    )
+    hits = resp["hits"]["hits"]
+    if not hits:
+        print("case-insensitivity check skipped: no documents with sea_area")
+        return True
+    original = hits[0]["_source"]["sea_area"]
+    counts = {
+        variant: client.count(index=dest, query={"term": {"sea_area.keyword": variant}})["count"]
+        for variant in (original, original.lower(), original.upper())
+    }
+    ok = len(set(counts.values())) == 1 and next(iter(counts.values())) > 0
+    print(f"case-insensitivity check on sea_area.keyword: {counts} -> {'OK' if ok else 'MISMATCH'}")
+    return ok
 
 
 def reindex(source: str, dest: str, dims: int | None):
@@ -71,6 +99,9 @@ def reindex(source: str, dest: str, dims: int | None):
     print(f"dest   {dest!r}: {dest_count} docs")
     if src_count != dest_count:
         print("WARNING: counts don't match - investigate before switching ES_INDEX over.")
+    if not verify_case_insensitive(client, dest):
+        print("WARNING: case variants returned different counts - the normalizer isn't applied; do not switch ES_INDEX over.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

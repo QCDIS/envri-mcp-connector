@@ -8,11 +8,37 @@ import logging
 from datetime import datetime, timezone
 from functools import lru_cache
 
-from elasticsearch import Elasticsearch, helpers
+from elasticsearch import BadRequestError, Elasticsearch, helpers
 
 from kb_common import config
 
 log = logging.getLogger(__name__)
+
+# Keyword fields that back exact-match filters/facets use this normalizer, so
+# "black sea", "BLACK SEA" and "Black Sea" all hit the same terms. Elasticsearch
+# applies it at index time and to term-level queries at search time; `_source`
+# keeps the original casing. Note terms aggregations return the *normalized*
+# (lowercase) keys - see kb_mcp.search.terms_agg.
+LOWERCASE_NORMALIZER = "lowercase"
+
+INDEX_SETTINGS = {
+    "analysis": {
+        "normalizer": {
+            LOWERCASE_NORMALIZER: {"type": "custom", "char_filter": [], "filter": ["lowercase"]},
+        }
+    }
+}
+
+
+def lowercase_keyword() -> dict:
+    return {"type": "keyword", "normalizer": LOWERCASE_NORMALIZER}
+
+
+def text_and_lowercase_keyword() -> dict:
+    """`text` (analyzed, for scoring) + case-insensitive `.keyword` sub-field
+    (for exact filters and aggregations)."""
+    return {"type": "text", "fields": {"keyword": lowercase_keyword()}}
+
 
 BASE_PROPERTIES = {
     "source": {"type": "keyword"},
@@ -46,7 +72,7 @@ def build_mapping(dims: int, extra_properties: dict = None) -> dict:
         },
         **(extra_properties or {}),
     }
-    return {"mappings": {"properties": properties}}
+    return {"settings": INDEX_SETTINGS, "mappings": {"properties": properties}}
 
 
 def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None, index: str = None):
@@ -56,7 +82,13 @@ def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None
         log.info("created index %s (dims=%d)", index, dims)
         return
 
-    client.indices.put_mapping(index=index, properties=build_mapping(dims, extra_properties)["mappings"]["properties"])
+    try:
+        client.indices.put_mapping(index=index, properties=build_mapping(dims, extra_properties)["mappings"]["properties"])
+    except BadRequestError as exc:
+        raise RuntimeError(
+            f"index {index!r} has a mapping that can't be updated in place (a field's normalizer/type changed?). "
+            f"Migrate it with scripts/ops/reindex.py, then point ES_INDEX at the new index. Cause: {exc}"
+        ) from exc
 
 
 def index_stats(index: str = None) -> dict:

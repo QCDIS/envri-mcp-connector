@@ -35,6 +35,27 @@ FACETABLE_FIELDS = {
 }
 
 
+# Fields mapped with the lowercase normalizer (see kb_common.es_index), i.e.
+# the ones list_* tools filter on. Their term queries take a lowercased value.
+CASE_INSENSITIVE_FIELDS = frozenset({
+    "sea_area.keyword",
+    "ocean_region.keyword",
+    "entity_types.keyword",
+    "data_center_name.keyword",
+    "project_name.keyword",
+    "networks",
+    "sensor_codes",
+    "oso_organization_id",
+})
+
+
+def normalize_filter_value(value: str) -> str:
+    """Mirror the index's lowercase normalizer (plus trimming stray whitespace
+    that LLM clients tend to add), so "Black Sea", "black sea" and "BLACK SEA "
+    build the same query."""
+    return value.strip().lower()
+
+
 def _hits_to_dicts(resp, fields=_SOURCE_FIELDS):
     return [
         {"_id": hit["_id"], "score": hit["_score"], "url": _source_url(hit["_id"]), **{f: hit["_source"].get(f) for f in fields}}
@@ -74,6 +95,8 @@ def get_by_id(index: str, doc_id: str) -> dict | None:
 
 def term_filter(index: str, field: str, value: str, limit: int = 20):
     client = es_index.get_client()
+    if field in CASE_INSENSITIVE_FIELDS:
+        value = normalize_filter_value(value)
     resp = client.search(index=index, query={"term": {field: value}}, size=limit, source=_SOURCE_FIELDS)
     return _hits_to_dicts(resp)
 
@@ -117,16 +140,43 @@ def geo_bounding_box(index: str, field: str, min_lat: float, max_lat: float, min
     return _hits_to_dicts(resp)
 
 
+def _display_value(key, source_value):
+    """Terms aggregations on a normalized field return lowercase keys; recover
+    the original casing ("black sea" -> "Black Sea") from a sample document,
+    which for multi-valued fields means picking the matching element."""
+    candidates = source_value if isinstance(source_value, list) else [source_value]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.lower() == key:
+            return candidate
+    return key
+
+
 def terms_agg(index: str, field: str, limit: int = 50, filter_query: dict | None = None):
     client = es_index.get_client()
+    source_field = field.removesuffix(".keyword")
     body = {
         "size": 0,
-        "aggs": {"values": {"terms": {"field": field, "size": limit}}},
+        "aggs": {
+            "values": {
+                "terms": {"field": field, "size": limit},
+                # One sample doc per bucket, only to recover original casing.
+                "aggs": {"original": {"top_hits": {"size": 1, "_source": {"includes": [source_field]}}}},
+            }
+        },
     }
     if filter_query:
         body["query"] = filter_query
     resp = client.search(index=index, **body)
-    return [{"value": b["key"], "count": b["doc_count"]} for b in resp["aggregations"]["values"]["buckets"]]
+    results = []
+    for bucket in resp["aggregations"]["values"]["buckets"]:
+        key = bucket["key"]
+        value = key
+        if field in CASE_INSENSITIVE_FIELDS and isinstance(key, str):
+            hits = bucket.get("original", {}).get("hits", {}).get("hits", [])
+            if hits:
+                value = _display_value(key, hits[0].get("_source", {}).get(source_field))
+        results.append({"value": value, "count": bucket["doc_count"]})
+    return results
 
 
 def index_stats(index: str):
