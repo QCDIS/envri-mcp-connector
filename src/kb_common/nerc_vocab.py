@@ -20,9 +20,7 @@ log = logging.getLogger(__name__)
 
 CACHE_PATH = Path("data/reference/nerc_vocab_cache.json")
 
-# Argo sensor `id` codes (e.g. CTD_TEMP) are SeaDataNet R25 device-catalogue
-# concepts, needed regardless of what any particular OSO revision references.
-BASE_COLLECTIONS = {"R25"}
+BASE_COLLECTIONS = {"C17", "R03", "R25"}
 
 _COLLECTION_RE = re.compile(r"vocab\.nerc\.ac\.uk/collection/([A-Za-z0-9]+)/")
 
