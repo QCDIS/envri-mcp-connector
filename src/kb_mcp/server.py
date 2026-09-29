@@ -248,7 +248,8 @@ def list_oso_entity_types() -> list[dict]:
 @_audited
 def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[dict]:
     """List distinct values (with counts) for one of a fixed set of useful
-    fields: data_center_name, networks, sensor_codes, project_name."""
+    fields: data_center_name, networks, sensor_codes, project_name. Filters
+    built from these values are case-insensitive."""
     return search.terms_agg(common_config.ES_INDEX, search.FACETABLE_FIELDS[field], limit)
 
 

@@ -120,9 +120,39 @@ def test_term_filter_sends_term_query(monkeypatch):
 
     results = search.term_filter("idx", "sea_area.keyword", "Black Sea", limit=5)
 
-    assert client.search_calls[0]["query"] == {"term": {"sea_area.keyword": "Black Sea"}}
+    assert client.search_calls[0]["query"] == {"term": {"sea_area.keyword": "black sea"}}
     assert client.search_calls[0]["size"] == 5
     assert results[0]["_id"] == "euro_argo:1900001"
+
+
+def test_term_filter_casing_variants_build_identical_queries(monkeypatch):
+    client = _FakeESClient(search_result=_CANNED_HITS)
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    for variant in ("black sea", "BLACK SEA", "Black Sea", "  bLaCk SeA "):
+        search.term_filter("idx", "sea_area.keyword", variant)
+
+    queries = [call["query"] for call in client.search_calls]
+    assert queries == [{"term": {"sea_area.keyword": "black sea"}}] * 4
+
+
+def test_term_filter_normalizes_every_case_insensitive_field(monkeypatch):
+    client = _FakeESClient(search_result=_CANNED_HITS)
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    for field in sorted(search.CASE_INSENSITIVE_FIELDS):
+        search.term_filter("idx", field, "MiXeD Case")
+
+    assert all(call["query"]["term"][field] == "mixed case" for call, field in zip(client.search_calls, sorted(search.CASE_INSENSITIVE_FIELDS)))
+
+
+def test_term_filter_leaves_other_fields_untouched(monkeypatch):
+    client = _FakeESClient(search_result=_CANNED_HITS)
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    search.term_filter("idx", "wmo", "ABC123")
+
+    assert client.search_calls[0]["query"] == {"term": {"wmo": "ABC123"}}
 
 
 def test_geo_distance_sends_geo_distance_query_and_computes_distance(monkeypatch):
@@ -177,3 +207,57 @@ def test_terms_agg_with_filter_includes_query(monkeypatch):
     search.terms_agg("idx", "entity_types.keyword", filter_query={"term": {"source": "oso"}})
 
     assert client.search_calls[0]["query"] == {"term": {"source": "oso"}}
+
+
+def test_terms_agg_restores_original_casing_from_sample_doc(monkeypatch):
+    client = _FakeESClient(
+        search_result={
+            "aggregations": {
+                "values": {
+                    "buckets": [
+                        {
+                            "key": "black sea",
+                            "doc_count": 3,
+                            "original": {"hits": {"hits": [{"_source": {"sea_area": "Black Sea"}}]}},
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    results = search.terms_agg("idx", "sea_area.keyword")
+
+    assert results == [{"value": "Black Sea", "count": 3}]
+    agg = client.search_calls[0]["aggs"]["values"]
+    assert agg["terms"]["field"] == "sea_area.keyword"
+    assert agg["aggs"]["original"]["top_hits"]["_source"] == {"includes": ["sea_area"]}
+
+
+def test_terms_agg_picks_matching_element_of_multivalued_field(monkeypatch):
+    client = _FakeESClient(
+        search_result={
+            "aggregations": {
+                "values": {
+                    "buckets": [
+                        {
+                            "key": "bgc",
+                            "doc_count": 2,
+                            "original": {"hits": {"hits": [{"_source": {"networks": ["Core", "BGC"]}}]}},
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    assert search.terms_agg("idx", "networks") == [{"value": "BGC", "count": 2}]
+
+
+def test_terms_agg_falls_back_to_key_when_no_sample_doc(monkeypatch):
+    client = _FakeESClient(search_result={"aggregations": {"values": {"buckets": [{"key": "black sea", "doc_count": 1}]}}})
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    assert search.terms_agg("idx", "sea_area.keyword") == [{"value": "black sea", "count": 1}]
