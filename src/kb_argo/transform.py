@@ -3,12 +3,15 @@ plus a natural-language summary that gets embedded for semantic search.
 """
 import argparse
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
 from kb_argo import config, link_oso
 from kb_common import nerc_vocab, seas
+
+log = logging.getLogger(__name__)
 
 SOURCE = "euro_argo"
 
@@ -36,6 +39,23 @@ def _geopoint(lat, lon):
     if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
         return None
     return {"lat": lat, "lon": lon}
+
+
+def count_cycles(raw: dict):
+    """Number of cycles the float has completed: length of `cycleIds`, else the
+    last reported cycle number. 0 (or None if the record carries neither) means
+    no cycle was ever recorded."""
+    last_cycle = raw.get("lastCycleBasicInfo") or {}
+    return len(raw.get("cycleIds") or []) or last_cycle.get("numCycle")
+
+
+def is_placeholder(raw: dict) -> bool:
+    """True for uninitialized/placeholder floats (e.g. WMO 9999995-9999998) that
+    have never completed an ocean cycle. These records carry owner/data-center
+    metadata (e.g. "Ifremer") but no real data, so they must not compete with
+    real floats in search. Detected by cycle count == 0 rather than by WMO
+    pattern, so it also catches placeholders outside the 99999xx range."""
+    return not count_cycles(raw)
 
 
 def resolve_sensors(sensors: list) -> list:
@@ -175,7 +195,7 @@ def build_record(raw: dict) -> dict:
 
     sensor_names = resolve_sensors(raw.get("sensors"))
 
-    num_cycles = len(raw.get("cycleIds") or []) or last_cycle.get("numCycle")
+    num_cycles = count_cycles(raw)
     launch_dt = _parse_date(deployment.get("launchDate"))
     last_dt = _parse_date(last_cycle.get("date"))
     mission_duration_days = (last_dt - launch_dt).days if launch_dt and last_dt else None
@@ -246,8 +266,16 @@ def iter_raw_records(raw_dir=None) -> Iterator[dict]:
 
 
 def iter_records(raw_dir=None) -> Iterator[dict]:
+    """Yield KB documents, skipping placeholder floats (cycle count 0)."""
+    skipped = 0
     for raw in iter_raw_records(raw_dir):
+        if is_placeholder(raw):
+            skipped += 1
+            log.debug("skipping placeholder float wmo=%s (0 cycles)", raw.get("wmo"))
+            continue
         yield build_record(raw)
+    if skipped:
+        log.info("skipped %d placeholder floats (0 cycles)", skipped)
 
 
 if __name__ == "__main__":

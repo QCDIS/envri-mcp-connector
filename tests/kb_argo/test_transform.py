@@ -152,3 +152,37 @@ def test_iter_raw_records_reads_json_files_from_dir(tmp_path):
     records = sorted(transform.iter_raw_records(tmp_path), key=lambda r: r["wmo"])
 
     assert records == [{"wmo": "1900001"}, {"wmo": "1900002"}]
+
+
+def test_count_cycles_prefers_cycle_ids_then_last_cycle_number():
+    assert transform.count_cycles({"cycleIds": [1, 2, 3]}) == 3
+    assert transform.count_cycles({"lastCycleBasicInfo": {"numCycle": 7}}) == 7
+    assert transform.count_cycles({}) is None
+
+
+def test_is_placeholder_true_when_no_cycles():
+    assert transform.is_placeholder({"wmo": "9999995", "cycleIds": []}) is True
+    assert transform.is_placeholder({"wmo": "9999996", "lastCycleBasicInfo": {"numCycle": 0}}) is True
+    assert transform.is_placeholder({"wmo": "9999997"}) is True
+
+
+def test_is_placeholder_false_for_real_float():
+    assert transform.is_placeholder(_sample_raw_record()) is False
+
+
+def _stub_enrichment(monkeypatch):
+    monkeypatch.setattr(transform.seas, "classify", lambda lat, lon: (None, None))
+    monkeypatch.setattr(transform.link_oso, "match_organization", lambda *candidates: None)
+    monkeypatch.setattr(transform.nerc_vocab, "get_label", lambda uri: None)
+
+
+def test_iter_records_skips_placeholders(tmp_path, monkeypatch):
+    _stub_enrichment(monkeypatch)
+    (tmp_path / "1900001.json").write_text(json.dumps(_sample_raw_record()))
+    (tmp_path / "9999995.json").write_text(
+        json.dumps(_sample_raw_record(wmo="9999995", cycleIds=[], lastCycleBasicInfo={"numCycle": 0}))
+    )
+
+    wmos = [r["wmo"] for r in transform.iter_records(tmp_path)]
+
+    assert wmos == ["1900001"]
