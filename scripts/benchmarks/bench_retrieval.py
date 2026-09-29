@@ -7,7 +7,7 @@ or --mode bm25 compares against either half in isolation. Query logic lives
 in kb_mcp.search (shared with the MCP server) - this is a thin CLI wrapper.
 
 Usage:
-    PYTHONPATH=src python scripts/eval/eval_retrieval.py [--index kb-scratch] [--k 5] [--mode hybrid|knn|bm25]
+    PYTHONPATH=src python scripts/benchmarks/bench_retrieval.py [--index kb-scratch] [--k 5] [--mode hybrid|knn|bm25]
 """
 import argparse
 import sys

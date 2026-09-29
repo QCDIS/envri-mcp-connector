@@ -8,7 +8,7 @@ Metrics per query:
   RR          = 1 / rank of first relevant doc in top k (0 if none found)
 
 Usage:
-    PYTHONPATH=src python scripts/eval/bench_relevance.py [--k 10] [--mode hybrid|knn|bm25]
+    PYTHONPATH=src python scripts/benchmarks/bench_relevance.py [--k 10] [--mode hybrid|knn|bm25]
 """
 import argparse
 import statistics

@@ -35,5 +35,5 @@ data/
 ## Scripts and tests
 
 - `scripts/ops/` — operational tools run against a live deployment (e.g. `reindex.py`, for migrating to a new index mapping without recomputing embeddings).
-- `scripts/eval/` — dev-quality tools: retrieval benchmarks and a manual eval script (see the README's Benchmarks table). These print results for a human to eyeball, not assertions, and need a live Elasticsearch/API to run against.
-- `tests/` — the pytest suite, mirroring `src/`'s package layout. Unlike `scripts/eval/`, these assert pass/fail and are hermetic: no live Elasticsearch, network, or embedding model. Run with `pytest` from repo root (needs `pip install -e .[api,dev]`). There is no CI configured to run them automatically yet.
+- `scripts/benchmarks/` — dev-quality tools: retrieval benchmarks and a manual eval script (see the README's Benchmarks table). These print results for a human to eyeball, not assertions, and need a live Elasticsearch/API to run against.
+- `tests/` — the pytest suite, mirroring `src/`'s package layout. Unlike `scripts/benchmarks/`, these assert pass/fail and are hermetic: no live Elasticsearch, network, or embedding model. Run with `pytest` from repo root (needs `pip install -e .[api,dev]`). There is no CI configured to run them automatically yet.

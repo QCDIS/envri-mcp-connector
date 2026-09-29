@@ -2,7 +2,7 @@
 in kb_common.hybrid_search) actually improve recall, and at what latency cost?
 
 Usage:
-    PYTHONPATH=src python scripts/eval/bench_hybrid_knn.py [--k 10] [--runs 10] [--candidates 10,50,150,300]
+    PYTHONPATH=src python scripts/benchmarks/bench_hybrid_knn.py [--k 10] [--runs 10] [--candidates 10,50,150,300]
 """
 import argparse
 import statistics

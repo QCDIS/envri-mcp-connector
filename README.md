@@ -91,10 +91,10 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 
 | Script | Measures |
 | --- | --- |
-| `scripts/eval/eval_retrieval.py --index ifremer-knowledge-base` | Top hits for hand-picked queries |
-| `scripts/eval/bench_relevance.py --k 10 --mode hybrid` | precision@k, recall@k, MRR |
-| `scripts/eval/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
-| `scripts/eval/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
+| `scripts/benchmarks/bench_retrieval.py --index ifremer-knowledge-base` | Top hits for hand-picked queries |
+| `scripts/benchmarks/bench_relevance.py --k 10 --mode hybrid` | precision@k, recall@k, MRR |
+| `scripts/benchmarks/bench_hybrid_knn.py --k 10 --runs 10 --candidates 10,50,150,300` | Recall/latency vs. candidate pool |
+| `scripts/benchmarks/bench_search_latency.py --base-url http://localhost:8080` | Per-stage `/search` latency (via `Server-Timing`), per query and under concurrent load |
 
 Operational tools live in `scripts/ops/` (e.g. `scripts/ops/reindex.py`).
 
