@@ -17,6 +17,31 @@ def test_format_hit_euro_argo():
     assert result["header"] == "Argo float 1900001"
     assert result["score"] == 1.5
     assert result["summary"] == "A float."
+    assert "vector" not in result
+
+
+def test_format_hit_excludes_vector_by_default_even_when_present():
+    hit = {
+        "_id": "euro_argo:1900001",
+        "score": 1.5,
+        "source": "euro_argo",
+        "embedding": [0.1, 0.2, 0.3],
+    }
+    result = format_hit(hit)
+
+    assert "vector" not in result
+
+
+def test_format_hit_includes_vector_when_requested():
+    hit = {
+        "_id": "euro_argo:1900001",
+        "score": 1.5,
+        "source": "euro_argo",
+        "embedding": [0.1, 0.2, 0.3],
+    }
+    result = format_hit(hit, include_vector=True)
+
+    assert result["vector"] == [0.1, 0.2, 0.3]
 
 
 def test_format_hit_oso_uses_pref_label_as_header():
@@ -46,7 +71,7 @@ def test_format_hit_defaults_for_missing_optional_fields():
     hit = {"_id": "euro_argo:1900001", "score": 1.0, "source": "euro_argo"}
     result = format_hit(hit)
 
-    assert result["vector"] is None
+    assert "vector" not in result
     assert result["summary"] is None
     assert result["highlight"] == []
     assert result["last_modified"] is None

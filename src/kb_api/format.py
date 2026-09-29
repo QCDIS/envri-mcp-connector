@@ -1,5 +1,5 @@
-"""Formats a raw hybrid-search hit into the fixed API result shape:
-score, url, header, vector, summary, highlight, last_modified.
+"""Formats a raw hybrid-search hit into the public API result shape.
+The embedding vector is opt-in because it is large and usually unnecessary.
 """
 
 FIELDS = ("source", "summary_text", "embedding", "indexed_at", "wmo", "pref_label")
@@ -9,7 +9,7 @@ def _local_id(doc_id: str) -> str:
     return doc_id.split(":", 1)[1] if ":" in doc_id else doc_id
 
 
-def format_hit(hit: dict) -> dict:
+def format_hit(hit: dict, *, include_vector: bool = False) -> dict:
     source = hit.get("source")
     local_id = _local_id(hit["_id"])
 
@@ -24,12 +24,14 @@ def format_hit(hit: dict) -> dict:
         url = None
         header = local_id
 
-    return {
+    result = {
         "score": hit["score"],
         "url": url,
         "header": header,
-        "vector": hit.get("embedding"),
         "summary": hit.get("summary_text"),
         "highlight": hit.get("highlights") or [],
         "last_modified": hit.get("indexed_at"),
     }
+    if include_vector:
+        result["vector"] = hit.get("embedding")
+    return result
