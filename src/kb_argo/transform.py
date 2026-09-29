@@ -4,22 +4,47 @@ plus a natural-language summary that gets embedded for semantic search.
 import argparse
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from kb_argo import config, link_oso
+from kb_argo import config, link_oso, parameters
 from kb_common import nerc_vocab, seas
 
 log = logging.getLogger(__name__)
 
 SOURCE = "euro_argo"
 
+_R03_BASE = "http://vocab.nerc.ac.uk/collection/R03/current/{}/"
+_ADJUSTED_SUFFIX = "_ADJUSTED"
 _R25_BASE = "http://vocab.nerc.ac.uk/collection/R25/current/{}/"
+_C17_BASE = "http://vocab.nerc.ac.uk/collection/C17/current/{}/"
+_C17_RE = re.compile(r"collection/C17/current/([^/\s]+)", re.IGNORECASE)
+_URI_RE = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
+
+
+def _clean(value):
+    """Stripped string, or None for None / blank / non-string values."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
 
 
 def _join(items, sep=", "):
     return sep.join(str(i) for i in items if i) if items else None
+
+
+def _join_natural(items):
+    """"a, b and c" - None for an empty list."""
+    items = [str(i) for i in items or [] if i]
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+    sep = "; " if any("," in i for i in items) else ", "
+    return f"{sep.join(items[:-1])} and {items[-1]}"
 
 
 def _parse_date(value):
@@ -29,7 +54,6 @@ def _parse_date(value):
         return datetime.fromisoformat(value)
     except ValueError:
         return None
-
 
 def _geopoint(lat, lon):
     """None unless lat/lon are valid - Argo uses sentinel values like -99.999
@@ -57,17 +81,48 @@ def is_placeholder(raw: dict) -> bool:
     pattern, so it also catches placeholders outside the 99999xx range."""
     return not count_cycles(raw)
 
+def resolve_parameter(code: str) -> str:
+    """Readable name for an Argo parameter code from the NERC R03 vocabulary."""
+    code = code.strip()
+    base = code.upper()
+    if base.endswith(_ADJUSTED_SUFFIX):
+        base = base[:-len(_ADJUSTED_SUFFIX)]
+    return nerc_vocab.get_label(_R03_BASE.format(base)) or code.replace("_", " ")
 
 def resolve_sensors(sensors: list) -> list:
-    """Return distinct resolved sensor names (falls back to the raw code)."""
+    """Return distinct readable sensor names: the NERC R25 label, else the R03
+    parameter name, else the raw code with underscores spaced out."""
     resolved = []
     for sensor in sensors or []:
-        sensor_id = sensor.get("id")
+        sensor_id = _clean(sensor.get("id"))
         if not sensor_id:
             continue
-        label = nerc_vocab.get_label(_R25_BASE.format(sensor_id)) or sensor_id
+        label = nerc_vocab.get_label(_R25_BASE.format(sensor_id)) or resolve_parameter(sensor_id)
         resolved.append(label)
     return list(dict.fromkeys(resolved))
+
+
+def resolve_variables(variables: list) -> list:
+    """Distinct readable names for raw parameter codes."""
+    names = [resolve_parameter(v) for v in variables or [] if _clean(v)]
+    return list(dict.fromkeys(names))
+
+
+def resolve_ship(value) -> str | None:
+    """Readable vessel name for `deployment.platform`.
+
+    The API gives a NERC C17 (ICES platform codes) URI; those are looked up in
+    the vocab cache. A URI we can't resolve yields None rather than leaking the
+    raw URI into the summary. A plain name is returned as-is."""
+    value = _clean(value)
+    if not value:
+        return None
+    match = _C17_RE.search(value)
+    if match:
+        return nerc_vocab.get_label(_C17_BASE.format(match.group(1)))
+    if _URI_RE.match(value):
+        return nerc_vocab.get_label(value)
+    return value
 
 
 def build_summary_text(raw: dict, derived: dict) -> str:
@@ -90,35 +145,39 @@ def build_summary_text(raw: dict, derived: dict) -> str:
         header += f" ({_join([maker, model])})"
     parts.append(header + ".")
 
-    owner = raw.get("owner")
-    pi = deployment.get("principalInvestigatorName")
-    project = raw.get("projectName")
-    if owner or pi or project:
-        line = "It is operated"
-        if owner:
-            line += f" by {owner}"
+    owner = _clean(raw.get("owner"))
+    pi = _clean(deployment.get("principalInvestigatorName"))
+    project = _clean(raw.get("projectName"))
+    if owner:
+        line = f"It is operated by {owner}"
         if pi and pi != owner:
-            line += f", principal investigator {pi},"
+            line += f" (principal investigator {pi})"
         if project:
             line += f" under the {project} project"
-        parts.append(line.strip().rstrip(",") + ".")
-
-    networks = _join(raw.get("networks"))
-    variables = _join(raw.get("variables"))
-    if networks or variables:
-        line = "It belongs to the"
-        if networks:
-            line += f" {networks} network(s)"
-        if variables:
-            line += f" and measures {variables.lower()}"
         parts.append(line + ".")
+    elif pi:
+        line = f"Its principal investigator is {pi}"
+        if project:
+            line += f", within the {project} project"
+        parts.append(line + ".")
+    elif project:
+        parts.append(f"It is part of the {project} project.")
+
+    networks = [n for n in raw.get("networks") or [] if n]
+    if networks:
+        noun = "network" if len(networks) == 1 else "networks"
+        parts.append(f"It belongs to the {_join_natural(networks)} {noun}.")
+
+    variable_names = resolve_variables(raw.get("variables"))
+    if variable_names:
+        parts.append(f"It measures {_join_natural(variable_names)}.")
 
     sensor_names = derived["sensor_names"]
     if sensor_names:
         parts.append(f"It is equipped with sensors for: {_join(sensor_names)}.")
 
     launch_date = deployment.get("launchDate")
-    ship = deployment.get("platform")
+    ship = resolve_ship(deployment.get("platform"))
     dep_lat, dep_lon = deployment.get("lat"), deployment.get("lon")
     if launch_date:
         line = f"It was deployed on {launch_date}"

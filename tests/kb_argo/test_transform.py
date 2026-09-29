@@ -49,13 +49,14 @@ def test_resolve_sensors_uses_nerc_label_and_falls_back_to_code(monkeypatch):
     )
     sensors = [{"id": "TEMP"}, {"id": "UNKNOWN_CODE"}, {}]
 
-    assert transform.resolve_sensors(sensors) == ["Temperature", "UNKNOWN_CODE"]
+    assert transform.resolve_sensors(sensors) == ["Temperature", "UNKNOWN CODE"]
 
 
-def test_resolve_sensors_deduplicates():
-    sensors = [{"id": "TEMP"}, {"id": "TEMP"}]
-    # No monkeypatch: nerc_vocab.get_label returns None (empty cache) -> falls back to raw id.
-    assert transform.resolve_sensors(sensors) == ["TEMP"]
+def test_resolve_sensors_deduplicates(monkeypatch):
+    monkeypatch.setattr(transform.nerc_vocab, "get_label", lambda uri: None)
+    sensors = [{"id": "CTD_TEMP"}, {"id": "CTD_TEMP"}]
+
+    assert transform.resolve_sensors(sensors) == ["CTD TEMP"]
 
 
 def _sample_raw_record(**overrides):
@@ -186,3 +187,155 @@ def test_iter_records_skips_placeholders(tmp_path, monkeypatch):
     wmos = [r["wmo"] for r in transform.iter_records(tmp_path)]
 
     assert wmos == ["1900001"]
+
+
+def _stub_vocab(monkeypatch, labels=None):
+    labels = labels or {}
+    monkeypatch.setattr(transform.nerc_vocab, "get_label", lambda uri: labels.get(uri))
+
+
+_R03 = "http://vocab.nerc.ac.uk/collection/R03/current/{}/"
+_R03_LABELS = {
+    _R03.format("PRES"): "Sea water pressure, equals 0 at sea-level",
+    _R03.format("TEMP"): "Sea temperature in-situ ITS-90 scale",
+    _R03.format("PSAL"): "Practical salinity",
+    _R03.format("DOXY"): "Dissolved oxygen",
+}
+
+
+def test_resolve_parameter_uses_r03_label(monkeypatch):
+    _stub_vocab(monkeypatch, _R03_LABELS)
+
+    assert transform.resolve_parameter("DOXY") == "Dissolved oxygen"
+    assert transform.resolve_parameter(" psal ") == "Practical salinity"
+
+
+def test_resolve_parameter_adjusted_uses_base_name(monkeypatch):
+    _stub_vocab(monkeypatch, _R03_LABELS)
+
+    assert transform.resolve_parameter("PSAL_ADJUSTED") == "Practical salinity"
+
+
+def test_resolve_parameter_unknown_code_is_spaced_not_dropped(monkeypatch):
+    _stub_vocab(monkeypatch)
+
+    assert transform.resolve_parameter("NEW_PARAM") == "NEW PARAM"
+
+
+def test_resolve_variables_spells_out_parameter_codes(monkeypatch):
+    _stub_vocab(monkeypatch, _R03_LABELS)
+
+    assert transform.resolve_variables(["PRES", "TEMP", "PSAL", "DOXY"]) == [
+        "Sea water pressure, equals 0 at sea-level",
+        "Sea temperature in-situ ITS-90 scale",
+        "Practical salinity",
+        "Dissolved oxygen",
+    ]
+
+
+def test_resolve_variables_deduplicates_and_skips_blank(monkeypatch):
+    _stub_vocab(monkeypatch, _R03_LABELS)
+
+    assert transform.resolve_variables(["TEMP", "TEMP", "", None, "TEMP_ADJUSTED"]) == [
+        "Sea temperature in-situ ITS-90 scale"
+    ]
+
+
+def test_join_natural_uses_semicolons_when_items_contain_commas():
+    assert transform._join_natural(["a", "b", "c"]) == "a, b and c"
+    assert transform._join_natural(["a, x", "b"]) == "a, x and b"
+    assert transform._join_natural(["a, x", "b", "c"]) == "a, x; b and c"
+    assert transform._join_natural([]) is None
+
+
+def test_resolve_ship_looks_up_c17_uri(monkeypatch):
+    uri = "http://vocab.nerc.ac.uk/collection/C17/current/35TH/"
+    _stub_vocab(monkeypatch, {uri: "Thalassa"})
+
+    assert transform.resolve_ship(uri) == "Thalassa"
+    # https / missing trailing slash variants resolve to the same concept
+    assert transform.resolve_ship("https://vocab.nerc.ac.uk/collection/C17/current/35TH") == "Thalassa"
+
+
+def test_resolve_ship_unresolvable_uri_is_dropped_not_leaked(monkeypatch):
+    _stub_vocab(monkeypatch)
+
+    assert transform.resolve_ship("http://vocab.nerc.ac.uk/collection/C17/current/ZZZZ/") is None
+    assert transform.resolve_ship("https://example.org/ships/42") is None
+
+
+def test_resolve_ship_plain_name_and_blank(monkeypatch):
+    _stub_vocab(monkeypatch)
+
+    assert transform.resolve_ship("  R/V Thalassa ") == "R/V Thalassa"
+    assert transform.resolve_ship("   ") is None
+    assert transform.resolve_ship(None) is None
+
+
+def _summary(monkeypatch, raw, labels=None):
+    _stub_vocab(monkeypatch, labels)
+    derived = {"sensor_names": [], "num_cycles": None, "mission_duration_days": None, "sea_area": None, "ocean_region": None}
+    return transform.build_summary_text(raw, derived)
+
+
+def test_summary_uses_readable_variables_and_ship(monkeypatch):
+    uri = "http://vocab.nerc.ac.uk/collection/C17/current/35TH/"
+    raw = _sample_raw_record(variables=["PRES", "TEMP", "PSAL", "DOXY"])
+    raw["deployment"]["platform"] = uri
+
+    summary = _summary(monkeypatch, raw, {uri: "Thalassa", **_R03_LABELS})
+
+    assert "Practical salinity" in summary and "Dissolved oxygen" in summary
+    assert "from Thalassa" in summary
+    for raw_token in ("PRES", "PSAL", "DOXY", "http"):
+        assert raw_token not in summary
+
+
+def test_summary_omits_unresolvable_ship_uri(monkeypatch):
+    raw = _sample_raw_record()
+    raw["deployment"]["platform"] = "http://vocab.nerc.ac.uk/collection/C17/current/ZZZZ/"
+
+    summary = _summary(monkeypatch, raw)
+
+    assert "deployed on 2020-01-01" in summary
+    assert "http" not in summary and " from " not in summary
+
+
+def test_summary_without_owner_but_with_pi_and_project(monkeypatch):
+    summary = _summary(monkeypatch, _sample_raw_record(owner=None))
+
+    assert "Its principal investigator is Jane Doe, within the Euro-Argo project." in summary
+    assert "operated" not in summary
+
+
+def test_summary_without_owner_or_pi(monkeypatch):
+    raw = _sample_raw_record(owner="  ")
+    raw["deployment"]["principalInvestigatorName"] = None
+
+    summary = _summary(monkeypatch, raw)
+
+    assert "It is part of the Euro-Argo project." in summary
+    assert "operated" not in summary and ", ." not in summary
+
+
+def test_summary_without_owner_pi_or_project(monkeypatch):
+    raw = _sample_raw_record(owner=None, projectName=None)
+    raw["deployment"]["principalInvestigatorName"] = None
+
+    summary = _summary(monkeypatch, raw)
+
+    assert "operated" not in summary and "project" not in summary
+
+
+def test_summary_variables_without_networks_has_no_dangling_phrase(monkeypatch):
+    summary = _summary(monkeypatch, _sample_raw_record(networks=[], variables=["DOXY"]), _R03_LABELS)
+
+    assert "It measures Dissolved oxygen." in summary
+    assert "belongs to the" not in summary
+
+
+def test_summary_networks_singular_and_plural(monkeypatch):
+    assert "belongs to the Core network." in _summary(monkeypatch, _sample_raw_record(networks=["Core"]))
+    assert "belongs to the Core and BGC networks." in _summary(
+        monkeypatch, _sample_raw_record(networks=["Core", "BGC"])
+    )
