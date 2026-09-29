@@ -52,15 +52,6 @@ async def _timing_middleware(request: Request, call_next):
 Source = Literal["euro_argo", "oso"]
 
 
-class SearchHit(BaseModel):
-    score: float
-    url: str | None = Field(None, description="Fleet Monitoring page (euro_argo) or OSO ontology IRI (oso)")
-    header: str = Field(description="'Argo float <wmo>', or the OSO pref_label / id")
-    vector: list[float] | None = Field(None, description="Document embedding")
-    summary: str | None = Field(None, description="Indexed summary text")
-    highlight: list[str] = Field(description="Matched fragments of summary; empty if no lexical match")
-    last_modified: str | None = Field(None, description="Index timestamp (ISO 8601); null until re-ingested")
-
 
 class TaskStarted(BaseModel):
     status: Literal["started"]
@@ -76,17 +67,20 @@ class Health(BaseModel):
     status: Literal["ok"]
 
 
-@app.get("/search", response_model=list[SearchHit])
+@app.get("/search", response_model=None)
 def search(
     query: str = Query(..., min_length=1, description="Natural-language search query"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of results to return"),
     source: Source | None = Query(
         None, description="Restrict results to one source: Euro-Argo float metadata or the OSO ontology"
     ),
+    include_vectors: bool = Query(
+        False, description="Include full document embedding vectors in the response"
+    ),
     _caller: str = Depends(rate_limited),
 ) -> list[dict]:
     hits = hybrid_search.search(common_config.ES_INDEX, query, k=limit, source=source, fields=FIELDS)
-    return [format_hit(hit) for hit in hits]
+    return [format_hit(hit, include_vector=include_vectors) for hit in hits]
 
 
 class InternalSearchRequest(BaseModel):
