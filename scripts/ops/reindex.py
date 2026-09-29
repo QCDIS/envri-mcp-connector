@@ -41,6 +41,19 @@ def get_dims(client, source_index: str, explicit: int | None) -> int:
     return props["embedding"]["dims"]
 
 
+def get_source_embedding_model(client, source_index: str) -> str:
+    """The embedding model recorded on the source index. The documents keep
+    their existing embeddings, so the new index must claim the same model, not
+    whatever EMBEDDING_MODEL happens to be set to here."""
+    mapping = next(iter(client.indices.get_mapping(index=source_index).values()))["mappings"]
+    model = (mapping.get("_meta") or {}).get("embedding_model")
+    if model:
+        return model
+    print(f"WARNING: source index has no embedding metadata; recording the configured model "
+          f"{config.EMBEDDING_MODEL!r} on the new index - make sure that's the model the embeddings came from.")
+    return config.EMBEDDING_MODEL
+
+
 def verify_case_insensitive(client, dest: str) -> bool:
     """Take a real sea_area value and confirm lower/upper/original casing all
     match the same number of documents on the normalized sea_area.keyword."""
@@ -73,8 +86,12 @@ def reindex(source: str, dest: str, dims: int | None):
         sys.exit(1)
 
     resolved_dims = get_dims(client, source, dims)
-    client.indices.create(index=dest, body=es_index.build_mapping(resolved_dims, merged_extra_properties()))
-    print(f"created {dest!r} (dims={resolved_dims})")
+    embedding_model = get_source_embedding_model(client, source)
+    client.indices.create(
+        index=dest,
+        body=es_index.build_mapping(resolved_dims, merged_extra_properties(), embedding_model=embedding_model),
+    )
+    print(f"created {dest!r} (dims={resolved_dims}, model={embedding_model})")
 
     resp = client.reindex(source={"index": source}, dest={"index": dest}, wait_for_completion=False)
     task_id = resp["task"]

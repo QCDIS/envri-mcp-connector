@@ -25,8 +25,11 @@ setup_logging()
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Loads the embedding model and runs a throwaway query through it at
-    startup instead of on the first search."""
+    """Loads the embedding model, checks it against the index's recorded
+    embedding model/dimensions (refusing to start on a mismatch)."""
+    es_index.verify_embedding_model(
+        es_index.get_client(), model=common_config.EMBEDDING_MODEL, dims=embed.embedding_dims()
+    )
     embed.embed_query("warmup")
     yield
 
