@@ -88,6 +88,12 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 | `list_seas`, `list_ocean_regions`, `list_argo_statuses`, `list_oso_entity_types`, `list_field_values` | Discover valid filter values |
 | `get_index_stats` | Document counts per source |
 
+### Output schemas, resources and prompts
+
+- **Output schemas.** All 17 tools declare a formal `outputSchema` (typed models in `src/kb_mcp/schemas.py`) and the server validates every result against it before returning it. Documents keep their `_id` key; unknown extra fields are passed through. List results are wrapped as `{"result": [...]}`, single documents as `{"result": {...} | null}`, and `get_index_stats` returns `{"total", "by_source"}` directly.
+- **Resources.** Read-only JSON value lists, read live from the index so they match what the filters accept: `kb://value-lists/` + `ocean-basins`, `seas`, `sensor-codes`, `statuses`, `data-centers`, `networks`, `projects`, `oso-entity-types`, `sources`. Each has `name`, `description`, `used_by` (the tool parameters that take these values) and `values` (`[{"value", "count"}]`).
+- **Prompts.** `find_argo_floats(region, sensor?, status?, deployed_after?)`, `investigate_float(wmo)`, `recent_deployments(status?, since_year?)` and `explore_knowledge_base()` walk a client through the value lists, structured filters and the right tool for each question.
+
 ### Structured filters on `search_knowledge_base`
 
 Free text alone can't strictly enforce criteria like "Argo float in the Sea of Japan with an oxygen sensor". The optional filters are applied as Elasticsearch `filter` clauses on **both** the kNN and the BM25 side, so they are hard constraints (not ranking hints), and kNN pre-filters so recall among valid hits isn't reduced. All filters are ANDed together.

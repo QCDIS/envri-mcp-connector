@@ -27,7 +27,7 @@ from kb_common import timing
 from kb_common.filters import DATE_BOUND_PATTERN
 from kb_common.logs import setup_logging
 from kb_common.ratelimit import RateLimiter
-from kb_mcp import config, search
+from kb_mcp import config, extras, schemas, search
 
 # Must run before MCPServer() below, whose own configure_logging() is a
 # no-op only if the root logger already has a handler.
@@ -94,8 +94,11 @@ mcp = MCPServer(
         "Search and browse the Ifremer knowledge base: Euro-Argo profiling float "
         "metadata and the OSO ontology (EMSO sites, platforms, organizations, "
         "people, projects). Use search_knowledge_base for open-ended natural- "
-        "language questions; use the list_*/get_index_stats tools first if you "
-        "need to know what values exist before filtering."
+        "language questions, with its structured filters (sea_area, ocean_basin, "
+        "sensor, status, date_min/date_max) for anything that must hold strictly. "
+        "The valid filter values are published as resources under "
+        "kb://value-lists/ (also available via the list_*/get_index_stats "
+        "tools); prompt templates describe common workflows."
     ),
     **_mcp_auth_kwargs,
 )
@@ -148,7 +151,7 @@ def search_knowledge_base(
     date_max: Annotated[date | None, Field(
         description="Only floats whose last reported cycle is on/before this date (YYYY-MM-DD), inclusive.",
     )] = None,
-) -> list[dict]:
+) -> list[schemas.SearchHit]:
     """Hybrid semantic + keyword search across the knowledge base.
 
     The optional sea_area, ocean_basin, sensor, status, date_min and date_max
@@ -178,7 +181,7 @@ def search_knowledge_base(
 @mcp.tool()
 @_timed
 @_audited
-def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, pattern=r"^[0-9]+$")]) -> dict | None:
+def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, pattern=r"^[0-9]+$")]) -> schemas.ArgoFloatRecord | None:
     """Fetch the full record for one Argo float by its WMO id (e.g. "6902919")."""
     return search.get_by_id(common_config.ES_INDEX, f"euro_argo:{wmo}")
 
@@ -186,7 +189,7 @@ def get_argo_float(wmo: Annotated[str, Field(min_length=1, max_length=20, patter
 @mcp.tool()
 @_timed
 @_audited
-def get_oso_entity(oso_id: FilterValue) -> dict | None:
+def get_oso_entity(oso_id: FilterValue) -> schemas.OsoEntityRecord | None:
     """Fetch the full record for one OSO ontology entity by its id
     (e.g. "Ifremer", "ANTARES")"""
     return search.get_by_id(common_config.ES_INDEX, f"oso:{oso_id}")
@@ -200,7 +203,7 @@ def find_argo_floats_near(
     lon: Longitude,
     radius_km: Annotated[float, Field(gt=0, le=20000)] = 200,
     limit: Limit = 20,
-) -> list[dict]:
+) -> list[schemas.NearbyFloat]:
     """Find Argo floats within radius_km of a point, based on each float's
     last known position, nearest first."""
     return search.geo_distance(common_config.ES_INDEX, "last_cycle_geopoint", lat, lon, radius_km, limit)
@@ -215,7 +218,7 @@ def find_argo_floats_in_box(
     min_lon: Longitude,
     max_lon: Longitude,
     limit: Limit = 20,
-) -> list[dict]:
+) -> list[schemas.KbHit]:
     """Find Argo floats whose last known position falls within a lat/lon
     bounding box."""
     return search.geo_bounding_box(common_config.ES_INDEX, "last_cycle_geopoint", min_lat, max_lat, min_lon, max_lon, limit)
@@ -224,7 +227,7 @@ def find_argo_floats_in_box(
 @mcp.tool()
 @_timed
 @_audited
-def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[dict]:
+def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
     """List Argo floats last located in a given specific named sea (e.g.
     "Black Sea", "Gulf of Mexico"). For a broader ocean basin instead
     (Atlantic/Pacific/Indian/Arctic/Southern), use list_argo_floats_by_ocean."""
@@ -234,7 +237,7 @@ def list_argo_floats_by_sea(sea_area: FilterValue, limit: Limit = 20) -> list[di
 @mcp.tool()
 @_timed
 @_audited
-def list_argo_floats_by_ocean(ocean_region: FilterValue, limit: Limit = 20) -> list[dict]:
+def list_argo_floats_by_ocean(ocean_region: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
     """List Argo floats last located in a given broad ocean basin (one of:
     Atlantic Ocean, Pacific Ocean, Indian Ocean, Arctic Ocean, Southern
     Ocean). For a specific named sea instead (e.g. "Black Sea"), use
@@ -245,7 +248,7 @@ def list_argo_floats_by_ocean(ocean_region: FilterValue, limit: Limit = 20) -> l
 @mcp.tool()
 @_timed
 @_audited
-def list_argo_floats_by_sensor(sensor_code: FilterValue, limit: Limit = 20) -> list[dict]:
+def list_argo_floats_by_sensor(sensor_code: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
     """List Argo floats equipped with a given sensor code (e.g. "DOXY" for
     dissolved oxygen, "CTD_TEMP" for temperature)."""
     return search.term_filter(common_config.ES_INDEX, "sensor_codes", sensor_code, limit)
@@ -266,7 +269,7 @@ def list_argo_floats_by_status_and_deployment(
         description='Deployed on/before this date: "2020", "2020-06" or "2020-06-15". A bare year means through 31 December of that year.',
     )] = None,
     limit: Limit = 20,
-) -> list[dict]:
+) -> list[schemas.FloatListing]:
     """List Argo floats by operational status and/or deployment date, most
     recently deployed first. At least one of status, deployed_after,
     deployed_before is required; all given criteria must hold. Examples:
@@ -281,7 +284,7 @@ def list_argo_floats_by_status_and_deployment(
 @mcp.tool()
 @_timed
 @_audited
-def list_argo_statuses() -> list[dict]:
+def list_argo_statuses() -> list[schemas.FacetValue]:
     """List every platform status value present in the Argo data, with how
     many floats have it. Feeds list_argo_floats_by_status_and_deployment."""
     return search.terms_agg(common_config.ES_INDEX, "status_code", filter_query={"term": {"source": "euro_argo"}})
@@ -290,7 +293,7 @@ def list_argo_statuses() -> list[dict]:
 @mcp.tool()
 @_timed
 @_audited
-def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> list[dict]:
+def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
     """List OSO entities of a given type (e.g. "Organization", "Platform",
     "Site", "RegionalFacility"). Use list_oso_entity_types first to see the
     exact values that exist."""
@@ -300,7 +303,7 @@ def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> li
 @mcp.tool()
 @_timed
 @_audited
-def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Limit = 20) -> list[dict]:
+def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
     """List Argo floats operated by a given OSO organization id (e.g.
     "Ifremer") - the cross-source link between the two sources. Find
     organization ids via search_knowledge_base or list_oso_entities_by_type("Organization")."""
@@ -310,7 +313,7 @@ def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Li
 @mcp.tool()
 @_timed
 @_audited
-def list_seas() -> list[dict]:
+def list_seas() -> list[schemas.FacetValue]:
     """List every specific named sea present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_sea."""
     return search.terms_agg(common_config.ES_INDEX, "sea_area.keyword", filter_query={"term": {"source": "euro_argo"}})
@@ -319,7 +322,7 @@ def list_seas() -> list[dict]:
 @mcp.tool()
 @_timed
 @_audited
-def list_ocean_regions() -> list[dict]:
+def list_ocean_regions() -> list[schemas.FacetValue]:
     """List every broad ocean basin present in the Argo data, with how many
     floats were last located there. Feeds list_argo_floats_by_ocean."""
     return search.terms_agg(common_config.ES_INDEX, "ocean_region.keyword", filter_query={"term": {"source": "euro_argo"}})
@@ -328,7 +331,7 @@ def list_ocean_regions() -> list[dict]:
 @mcp.tool()
 @_timed
 @_audited
-def list_oso_entity_types() -> list[dict]:
+def list_oso_entity_types() -> list[schemas.FacetValue]:
     """List every OSO entity type present, with counts. Feeds
     list_oso_entities_by_type."""
     return search.terms_agg(common_config.ES_INDEX, "entity_types.keyword", filter_query={"term": {"source": "oso"}})
@@ -337,7 +340,7 @@ def list_oso_entity_types() -> list[dict]:
 @mcp.tool()
 @_timed
 @_audited
-def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[dict]:
+def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[schemas.FacetValue]:
     """List distinct values (with counts) for one of a fixed set of useful
     fields: data_center_name, networks, sensor_codes, project_name. Filters
     built from these values are case-insensitive."""
@@ -347,10 +350,13 @@ def list_field_values(field: FacetField, limit: FacetLimit = 50) -> list[dict]:
 @mcp.tool()
 @_timed
 @_audited
-def get_index_stats() -> dict:
+def get_index_stats() -> schemas.IndexStats:
     """Document counts in the knowledge base, overall and per source. Call
     this first if you're unsure whether the KB has data before searching."""
     return search.index_stats(common_config.ES_INDEX)
+
+
+extras.register(mcp)
 
 
 class _RateLimitMiddleware:
