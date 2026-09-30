@@ -191,6 +191,61 @@ def test_term_filter_leaves_other_fields_untouched(monkeypatch):
     assert client.search_calls[0]["query"] == {"term": {"wmo": "ABC123"}}
 
 
+def test_filter_floats_builds_term_and_range_queries(monkeypatch):
+    client = _FakeESClient(
+        search_result={
+            "hits": {
+                "hits": [
+                    {
+                        "_id": "euro_argo:1900001",
+                        "_source": {
+                            "source": "euro_argo", "summary_text": "A float.",
+                            "status_code": "ACTIVE", "deployment_date": "2022-03-01",
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    results = search.filter_floats("idx", status="active", deployed_after="2020", deployed_before="2022-06", limit=7)
+
+    call = client.search_calls[0]
+    clauses = call["query"]["bool"]["filter"]
+    assert {"term": {"source": "euro_argo"}} in clauses
+    assert any("terms" in c and "ACTIVE" in c["terms"]["status_code"] for c in clauses)
+    assert {"range": {"deployment_date": {"format": "strict_date_optional_time", "gte": "2020", "lte": "2022-06"}}} in clauses
+    assert call["size"] == 7
+    assert call["sort"] == [{"deployment_date": {"order": "desc", "missing": "_last"}}]
+    assert results == [
+        {
+            "_id": "euro_argo:1900001",
+            "url": "https://fleetmonitoring.euro-argo.eu/float/1900001",
+            "source": "euro_argo",
+            "summary_text": "A float.",
+            "status_code": "ACTIVE",
+            "deployment_date": "2022-03-01",
+        }
+    ]
+
+
+def test_filter_floats_status_only_has_no_range(monkeypatch):
+    client = _FakeESClient(search_result=_CANNED_HITS)
+    monkeypatch.setattr(search.es_index, "get_client", lambda: client)
+
+    search.filter_floats("idx", status="inactive")
+
+    assert not any("range" in c for c in client.search_calls[0]["query"]["bool"]["filter"])
+
+
+def test_filter_floats_requires_a_criterion():
+    import pytest
+
+    with pytest.raises(ValueError):
+        search.filter_floats("idx")
+
+
 def test_geo_distance_sends_geo_distance_query_and_computes_distance(monkeypatch):
     client = _FakeESClient(
         search_result={

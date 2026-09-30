@@ -83,8 +83,9 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 | `get_argo_float`, `get_oso_entity` | Full record by WMO / OSO id |
 | `find_argo_floats_near`, `find_argo_floats_in_box` | Floats by last known position |
 | `list_argo_floats_by_sea` / `_by_ocean` / `_by_sensor` / `_by_organization` | Floats by region, sensor or operator |
+| `list_argo_floats_by_status_and_deployment` | Floats by operational `status` and/or deployment window (`deployed_after`, `deployed_before`), newest first |
 | `list_oso_entities_by_type` | OSO entities of a given type |
-| `list_seas`, `list_ocean_regions`, `list_oso_entity_types`, `list_field_values` | Discover valid filter values |
+| `list_seas`, `list_ocean_regions`, `list_argo_statuses`, `list_oso_entity_types`, `list_field_values` | Discover valid filter values |
 | `get_index_stats` | Document counts per source |
 
 ### Structured filters on `search_knowledge_base`
@@ -96,10 +97,19 @@ Free text alone can't strictly enforce criteria like "Argo float in the Sea of J
 | `sea_area` | `sea_area.keyword` | see `list_seas`; case-insensitive |
 | `ocean_basin` | `ocean_region.keyword` | see `list_ocean_regions`; case-insensitive |
 | `sensor` | `sensor_codes` | e.g. `DOXY`; case-insensitive |
-| `status` | `status_code` | un-normalized field; the value as given, upper- and lower-case are tried |
+| `status` | `status_code` | un-normalized field; `active`/`inactive`/`closed` expand to the stored codes (see `STATUS_SYNONYMS` in `kb_common/filters.py`), anything else is matched as given in as-is/upper/lower case; see `list_argo_statuses` |
 | `date_min` / `date_max` | `last_cycle_date` | `YYYY-MM-DD`, both inclusive |
 
 Filters target Euro-Argo float fields, so OSO records are excluded whenever one is set.
+
+### Status and deployment-date tool
+
+`list_argo_floats_by_status_and_deployment(status?, deployed_after?, deployed_before?, limit)` needs at least one criterion and ANDs them. It runs a `terms` query on `status_code` and a `range` query on `deployment_date`, sorted newest deployment first. Dates are `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, both bounds inclusive, and a partial date covers its whole period, so `deployed_after="2022"` means from 2022-01-01 and `deployed_before="2015"` means through 2015-12-31.
+
+```json
+{ "status": "active", "deployed_after": "2022" }
+{ "status": "inactive", "deployed_after": "2015", "deployed_before": "2015" }
+```
 
 ## Benchmarks
 

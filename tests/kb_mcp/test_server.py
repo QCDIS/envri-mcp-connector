@@ -139,6 +139,67 @@ def test_search_knowledge_base_rejects_inverted_date_range():
         _call_tool("search_knowledge_base", {"query": "x", "date_min": "2024-06-01", "date_max": "2024-01-01"})
 
 
+# --- list_argo_floats_by_status_and_deployment ---
+
+
+def test_status_and_deployment_tool_forwards_params(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        server.search, "filter_floats", lambda index, status, after, before, limit: captured.update(
+            status=status, after=after, before=before, limit=limit
+        ) or []
+    )
+
+    _call_tool(
+        "list_argo_floats_by_status_and_deployment",
+        {"status": "active", "deployed_after": "2020-06-15", "deployed_before": "2022", "limit": 5},
+    )
+
+    assert captured == {"status": "active", "after": "2020-06-15", "before": "2022", "limit": 5}
+
+
+def test_status_and_deployment_tool_accepts_year_as_number(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        server.search, "filter_floats", lambda index, status, after, before, limit: captured.update(after=after) or []
+    )
+
+    _call_tool("list_argo_floats_by_status_and_deployment", {"deployed_after": 2020})
+
+    assert captured["after"] == "2020"
+
+
+@pytest.mark.parametrize("bad", ["last spring", "20", "2020/01/01"])
+def test_status_and_deployment_tool_rejects_malformed_dates(bad):
+    with pytest.raises(ToolError):
+        _call_tool("list_argo_floats_by_status_and_deployment", {"deployed_after": bad})
+
+
+def test_status_and_deployment_tool_rejects_no_criteria():
+    with pytest.raises(ToolError):
+        _call_tool("list_argo_floats_by_status_and_deployment", {})
+
+
+def test_status_and_deployment_tool_rejects_inverted_range(monkeypatch):
+    monkeypatch.setattr(server.search.es_index, "get_client", lambda: None)
+    with pytest.raises(ToolError):
+        _call_tool("list_argo_floats_by_status_and_deployment", {"deployed_after": "2022", "deployed_before": "2020"})
+
+
+def test_list_argo_statuses_aggregates_status_code(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        server.search, "terms_agg", lambda index, field, limit=50, filter_query=None: captured.update(
+            field=field, filter_query=filter_query
+        ) or []
+    )
+
+    _call_tool("list_argo_statuses", {})
+
+    assert captured["field"] == "status_code"
+    assert captured["filter_query"] == {"term": {"source": "euro_argo"}}
+
+
 def test_get_argo_float_builds_correct_doc_id(monkeypatch):
     captured = {}
     monkeypatch.setattr(server.search, "get_by_id", lambda index, doc_id: captured.update(doc_id=doc_id) or None)

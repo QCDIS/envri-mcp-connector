@@ -12,7 +12,7 @@ import logging
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from starlette.responses import Response
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -24,6 +24,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from kb_common import auth as shared_auth
 from kb_common import config as common_config
 from kb_common import timing
+from kb_common.filters import DATE_BOUND_PATTERN
 from kb_common.logs import setup_logging
 from kb_common.ratelimit import RateLimiter
 from kb_mcp import config, search
@@ -107,6 +108,15 @@ FacetLimit = Annotated[int, Field(ge=1, le=500)]
 FilterValue = Annotated[str, Field(min_length=1, max_length=200)]
 Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
+
+
+def _year_as_text(value):
+    """Clients often send a bare year as a JSON number (2020); accept it."""
+    return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+# YYYY, YYYY-MM or YYYY-MM-DD, inclusive
+DateBound = Annotated[str, BeforeValidator(_year_as_text), Field(pattern=DATE_BOUND_PATTERN)]
 
 
 @mcp.tool()
@@ -239,6 +249,42 @@ def list_argo_floats_by_sensor(sensor_code: FilterValue, limit: Limit = 20) -> l
     """List Argo floats equipped with a given sensor code (e.g. "DOXY" for
     dissolved oxygen, "CTD_TEMP" for temperature)."""
     return search.term_filter(common_config.ES_INDEX, "sensor_codes", sensor_code, limit)
+
+
+@mcp.tool()
+@_timed
+@_audited
+def list_argo_floats_by_status_and_deployment(
+    status: Annotated[str | None, Field(
+        min_length=1, max_length=200,
+        description='Operational status, e.g. "active" or "inactive" (see list_argo_statuses for the stored values). Case-insensitive.',
+    )] = None,
+    deployed_after: Annotated[DateBound | None, Field(
+        description='Deployed on/after this date: "2020", "2020-06" or "2020-06-15". A bare year means from 1 January of that year.',
+    )] = None,
+    deployed_before: Annotated[DateBound | None, Field(
+        description='Deployed on/before this date: "2020", "2020-06" or "2020-06-15". A bare year means through 31 December of that year.',
+    )] = None,
+    limit: Limit = 20,
+) -> list[dict]:
+    """List Argo floats by operational status and/or deployment date, most
+    recently deployed first. At least one of status, deployed_after,
+    deployed_before is required; all given criteria must hold. Examples:
+    status="active" for floats still operating; deployed_after="2022" for
+    floats deployed since 2022; deployed_after="2015", deployed_before="2015"
+    for floats deployed during 2015. Each result includes status_code and
+    deployment_date. For open-ended questions combining these with free text,
+    use search_knowledge_base instead."""
+    return search.filter_floats(common_config.ES_INDEX, status, deployed_after, deployed_before, limit)
+
+
+@mcp.tool()
+@_timed
+@_audited
+def list_argo_statuses() -> list[dict]:
+    """List every platform status value present in the Argo data, with how
+    many floats have it. Feeds list_argo_floats_by_status_and_deployment."""
+    return search.terms_agg(common_config.ES_INDEX, "status_code", filter_query={"term": {"source": "euro_argo"}})
 
 
 @mcp.tool()
