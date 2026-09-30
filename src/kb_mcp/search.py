@@ -136,9 +136,7 @@ def filter_floats(
     limit: int = 20,
 ):
     """Euro-Argo floats by operational status and/or deployment-date window,
-    most recently deployed first. Maps to a `terms` query on status_code and
-    a `range` query on deployment_date (see kb_common.filters); at least one
-    criterion is required."""
+    most recently deployed first. At least one criterion is required."""
     if not (status or deployed_after or deployed_before):
         raise ValueError("give at least one of status, deployed_after, deployed_before")
     filters = build_filters(

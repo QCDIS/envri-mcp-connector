@@ -17,7 +17,6 @@ def format_hit(hit: dict, *, include_vector: bool = False) -> dict:
         url = f"https://fleetmonitoring.euro-argo.eu/float/{local_id}"
         header = f"Argo float {local_id}"
     elif source == "oso":
-        # A real, dereferenceable link to OSO's own ontology, not this project.
         url = f"https://w3id.org/earthsemantics/OSO#{local_id}"
         header = hit.get("pref_label") or local_id
     else:

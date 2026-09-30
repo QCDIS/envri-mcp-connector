@@ -4,8 +4,6 @@ Run directly:
     PYTHONPATH=src python -m kb_mcp.server
 
 All tools operate against the single configured index (kb_common.config.ES_INDEX)
-- `index` is not a tool parameter, so the calling AI doesn't need to know or
-guess an internal index name.
 """
 import functools
 import logging
@@ -29,8 +27,6 @@ from kb_common.logs import setup_logging
 from kb_common.ratelimit import RateLimiter
 from kb_mcp import config, extras, schemas, search
 
-# Must run before MCPServer() below, whose own configure_logging() is a
-# no-op only if the root logger already has a handler.
 setup_logging()
 log = logging.getLogger(__name__)
 
@@ -272,12 +268,9 @@ def list_argo_floats_by_status_and_deployment(
 ) -> list[schemas.FloatListing]:
     """List Argo floats by operational status and/or deployment date, most
     recently deployed first. At least one of status, deployed_after,
-    deployed_before is required; all given criteria must hold. Examples:
-    status="active" for floats still operating; deployed_after="2022" for
-    floats deployed since 2022; deployed_after="2015", deployed_before="2015"
-    for floats deployed during 2015. Each result includes status_code and
-    deployment_date. For open-ended questions combining these with free text,
-    use search_knowledge_base instead."""
+    deployed_before is required; all given criteria must hold.
+    Each result includes status_code and deployment_date. For open-ended
+    questions combining these with free text, use search_knowledge_base instead."""
     return search.filter_floats(common_config.ES_INDEX, status, deployed_after, deployed_before, limit)
 
 
@@ -304,9 +297,8 @@ def list_oso_entities_by_type(entity_type: FilterValue, limit: Limit = 20) -> li
 @_timed
 @_audited
 def list_argo_floats_by_organization(oso_organization_id: FilterValue, limit: Limit = 20) -> list[schemas.KbHit]:
-    """List Argo floats operated by a given OSO organization id (e.g.
-    "Ifremer") - the cross-source link between the two sources. Find
-    organization ids via search_knowledge_base or list_oso_entities_by_type("Organization")."""
+    """List Argo floats operated by a given OSO organization id (e.g."Ifremer").
+    Find organization ids via search_knowledge_base or list_oso_entities_by_type("Organization")."""
     return search.term_filter(common_config.ES_INDEX, "oso_organization_id", oso_organization_id, limit)
 
 
@@ -380,8 +372,7 @@ class _RateLimitMiddleware:
 
 
 def _assert_startup_hosts() -> None:
-    """Refuse to start on a guaranteed-broken security configuration.
-    """
+    """Refuse to start on a guaranteed-broken security configuration."""
     if not common_config.SECURITY_ENABLED:
         return
     if not config.MCP_ALLOWED_HOSTS:

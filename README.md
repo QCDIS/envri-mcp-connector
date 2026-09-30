@@ -3,10 +3,12 @@
 Euro-Argo floats + OSO ontology in one Elasticsearch index (`source: euro_argo` / `oso`), embedded for RAG, served via an HTTP API and an MCP server.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for package roles and data flow.
+See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for benchmark details.
 
 ## Security
 
-- Bearer token required on every route except `/health` - `KB_READ_TOKENS` / `KB_ADMIN_TOKENS` in `.env` (`name:token`, generate with `python -c "import secrets; print(secrets.token_hex(32))"`)
+- Bearer token required on every route except `/health` - `KB_READ_TOKENS` / `KB_ADMIN_TOKENS` in `.env`
+  - `name:token`, generate with `python -c "import secrets; print(secrets.token_hex(32))"`
 - `KB_ADMIN_TOKENS` additionally gates `/fetch` and `/index` (real ingestion jobs)
 - `MCP_ALLOWED_HOSTS` restricts which `Host` header `kb-mcp` accepts
 - `KB_SECURITY_ENABLED=false` disables all of the above at once - local testing only
@@ -14,7 +16,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for package roles and data flow
 ## Setup
 
 ```bash
-cp .env.example .env    # set ELASTIC_PASSWORD, tokens, etc.
+# Set elasticsearch password, read/admin tokens, mcp allowed host before running
+cp .env.example .env
 ```
 
 GPU recommended (`EMBEDDING_DEVICE=cuda`); `cpu` works but it's slower. Python ≥ 3.12 for local installs.
@@ -107,15 +110,6 @@ Free text alone can't strictly enforce criteria like "Argo float in the Sea of J
 | `date_min` / `date_max` | `last_cycle_date` | `YYYY-MM-DD`, both inclusive |
 
 Filters target Euro-Argo float fields, so OSO records are excluded whenever one is set.
-
-### Status and deployment-date tool
-
-`list_argo_floats_by_status_and_deployment(status?, deployed_after?, deployed_before?, limit)` needs at least one criterion and ANDs them. It runs a `terms` query on `status_code` and a `range` query on `deployment_date`, sorted newest deployment first. Dates are `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, both bounds inclusive, and a partial date covers its whole period, so `deployed_after="2022"` means from 2022-01-01 and `deployed_before="2015"` means through 2015-12-31.
-
-```json
-{ "status": "active", "deployed_after": "2022" }
-{ "status": "inactive", "deployed_after": "2015", "deployed_before": "2015" }
-```
 
 ## Benchmarks
 

@@ -10,15 +10,14 @@ from kb_common import config, timing
 
 
 def _model_is_cached(model_name: str) -> bool:
-    """Whether model_name is already in the local HF cache - a local
-    directory scan, no network call."""
+    """Whether model_name is already in the local HF cache."""
     try:
         from huggingface_hub import scan_cache_dir
         return any(repo.repo_id == model_name for repo in scan_cache_dir().repos)
     except Exception:
         return False
 
-
+# If the model is cached, use it offline to avoid network calls.
 if _model_is_cached(config.EMBEDDING_MODEL):
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
@@ -31,15 +30,18 @@ _E5_QUERY_PREFIX = "query: "
 
 @lru_cache(maxsize=1)
 def get_model() -> SentenceTransformer:
+    """Load the embedding model from the local cache or download it if not present."""
     with timing.stage("model_load"):
         return SentenceTransformer(config.EMBEDDING_MODEL, device=config.EMBEDDING_DEVICE)
 
 
 def embedding_dims() -> int:
+    """Return the number of embedding dimensions."""
     return get_model().get_sentence_embedding_dimension()
 
 
 def _encode(texts: list[str]) -> list[list[float]]:
+    """Encode a list of texts into embeddings."""
     model = get_model()
     vectors = model.encode(
         texts,
@@ -58,6 +60,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 
 
 def _encode_queries(texts: list[str]) -> list[list[float]]:
+    """Encode a list of query texts into embeddings."""
     is_e5 = "e5" in config.EMBEDDING_MODEL.lower()
     inputs = [f"{_E5_QUERY_PREFIX}{t}" if is_e5 else t for t in texts]
     return _encode(inputs)
@@ -71,9 +74,12 @@ _worker_started = False
 
 
 def _batch_worker() -> None:
+    """Worker thread that processes batches of query embeddings."""
     while True:
         batch = [_query_queue.get()]
         deadline = time.monotonic() + config.EMBED_QUERY_BATCH_WINDOW_MS / 1000
+
+        # Collect up to max batch size queries from the queue within the batch window.
         while len(batch) < config.EMBED_QUERY_BATCH_MAX_SIZE:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -83,6 +89,7 @@ def _batch_worker() -> None:
             except queue.Empty:
                 break
 
+        # Compute embeddings for the batch and set results in the futures.
         try:
             vectors = _encode_queries([text for text, _ in batch])
         except Exception as exc:
@@ -94,6 +101,7 @@ def _batch_worker() -> None:
 
 
 def _ensure_worker() -> None:
+    """Ensure the worker thread is started, starting it if necessary."""
     global _worker_started
     if _worker_started:
         return

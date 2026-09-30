@@ -9,6 +9,8 @@ _current: ContextVar[dict | None] = ContextVar("kb_timing_current", default=None
 
 
 def _record(name: str, elapsed: float) -> None:
+    """Records the elapsed time for the given stage name."""
+
     stages = _current.get()
     if stages is not None:
         stages[name] = stages.get(name, 0.0) + elapsed
@@ -16,6 +18,8 @@ def _record(name: str, elapsed: float) -> None:
 
 @contextmanager
 def stage(name: str):
+    """Context manager that measures the elapsed time of a block."""
+
     start = time.perf_counter()
     try:
         yield

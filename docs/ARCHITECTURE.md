@@ -15,7 +15,7 @@
 
 ## Data layout
 
-```
+```md
 data/
   seas/World_Seas_IHO_v3.simplified.pkl   # tracked — no regeneration path in this repo
   reference/

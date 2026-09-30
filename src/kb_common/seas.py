@@ -10,8 +10,7 @@ from shapely.strtree import STRtree
 
 from kb_common import config
 
-# ~0.01 degree (~1km at the equator) - negligible for offshore float
-# positions, drastically fewer vertices than the source's full resolution.
+# ~0.01 degree (~1km at the equator)
 _SIMPLIFY_TOLERANCE = 0.01
 _CACHE_SUFFIX = ".simplified.pkl"
 
@@ -26,6 +25,8 @@ class SeasIndex:
 
     @classmethod
     def from_shapefile(cls, shp_path: Path) -> "SeasIndex":
+        """Constructs a SeasIndex from the given shapefile."""
+
         reader = shapefile.Reader(str(shp_path))
         names, geoms = [], []
         for sr in reader.shapeRecords():
@@ -35,6 +36,8 @@ class SeasIndex:
         return cls(names, geoms)
 
     def classify(self, lat: float, lon: float) -> str | None:
+        """Classifies the given latitude/longitude point as a sea region."""
+
         if lat is None or lon is None:
             return None
         point = Point(lon, lat)
@@ -78,6 +81,8 @@ def classify_sea(lat: float, lon: float) -> str | None:
 
 @lru_cache(maxsize=1)
 def _load_sea_to_ocean() -> dict:
+    """Loads the sea-to-ocean mapping from the cache file."""
+
     if not SEA_TO_OCEAN_PATH.exists():
         return {}
     return json.loads(SEA_TO_OCEAN_PATH.read_text())

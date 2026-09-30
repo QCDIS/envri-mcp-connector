@@ -1,7 +1,6 @@
 """FastAPI bearer-token dependencies for kb_api, backed by kb_common.auth's
 static KB_READ_TOKENS / KB_ADMIN_TOKENS allowlist. 401 means "no valid token
-at all"; 403 means "valid token, but not admin-tier" - kept distinct so a
-caller can tell an auth problem from a privilege problem.
+at all"; 403 means "valid token, but not admin-tier"
 """
 import logging
 

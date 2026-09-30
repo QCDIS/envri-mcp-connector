@@ -20,6 +20,7 @@ CHUNK_SIZE = 256
 
 
 def chunked(iterable, size):
+    """Yield chunks of the given size from the iterable."""
     it = iter(iterable)
     while True:
         chunk = list(itertools.islice(it, size))
@@ -29,6 +30,7 @@ def chunked(iterable, size):
 
 
 def run_index(limit: int | None = None):
+    """Run the index pipeline, embedding and indexing records from the transform."""
     client = es_index.get_client()
     ensured = False
 

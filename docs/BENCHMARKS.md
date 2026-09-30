@@ -105,7 +105,7 @@ It produces two tables:
 
 - **Embed query (GPU)** = `embed`.
 - **ES query + rest of server** = `api_total` − `embed`.
-- **Outside the handler** = request wall time − `api_total`: network, connection handling and queueing before the handler runs or after it returns.
+- **Outside the handler** = request real time − `api_total`: network, connection handling and queueing before the handler runs or after it returns.
 
 **Why batching matters.** Encoding one query per call serializes the GPU behind per-call Python and tokenizer overhead, so concurrent requests wait in line. Instead, a background worker collects queries that arrive within an **8 ms window** (up to **32**) and encodes them in a single GPU call. Tune with:
 

@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 
 
 def fetch_all(url: str = None, dest=None, force: bool = False) -> None:
+    """Fetches the OSO ontology OWL file from its GitHub release."""
+
     url = url or config.OSO_OWL_URL
     dest = dest or config.OSO_OWL_PATH
 

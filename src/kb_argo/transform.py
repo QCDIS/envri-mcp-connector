@@ -33,11 +33,12 @@ def _clean(value):
 
 
 def _join(items, sep=", "):
+    """Join items with the given separator, or None for an empty list."""
     return sep.join(str(i) for i in items if i) if items else None
 
 
 def _join_natural(items):
-    """"a, b and c" - None for an empty list."""
+    """Join items with natural language separators, or None for an empty list."""
     items = [str(i) for i in items or [] if i]
     if not items:
         return None
@@ -75,10 +76,7 @@ def count_cycles(raw: dict):
 
 def is_placeholder(raw: dict) -> bool:
     """True for uninitialized/placeholder floats (e.g. WMO 9999995-9999998) that
-    have never completed an ocean cycle. These records carry owner/data-center
-    metadata (e.g. "Ifremer") but no real data, so they must not compete with
-    real floats in search. Detected by cycle count == 0 rather than by WMO
-    pattern, so it also catches placeholders outside the 99999xx range."""
+    have never completed an ocean cycle.."""
     return not count_cycles(raw)
 
 def resolve_parameter(code: str) -> str:
@@ -109,11 +107,7 @@ def resolve_variables(variables: list) -> list:
 
 
 def resolve_ship(value) -> str | None:
-    """Readable vessel name for `deployment.platform`.
-
-    The API gives a NERC C17 (ICES platform codes) URI; those are looked up in
-    the vocab cache. A URI we can't resolve yields None rather than leaking the
-    raw URI into the summary. A plain name is returned as-is."""
+    """Readable vessel name for `deployment.platform`."""
     value = _clean(value)
     if not value:
         return None
@@ -126,6 +120,9 @@ def resolve_ship(value) -> str | None:
 
 
 def build_summary_text(raw: dict, derived: dict) -> str:
+    """Build the summary text for a float record."""
+
+    # Get the raw fields
     wmo = raw.get("wmo")
     platform = raw.get("platform") or {}
     deployment = raw.get("deployment") or {}
@@ -138,6 +135,8 @@ def build_summary_text(raw: dict, derived: dict) -> str:
     ptype = platform.get("type") or platform.get("name")
     maker = raw.get("maker")
     model = raw.get("model")
+
+    # Build the header
     header = f"Argo float {wmo}"
     if ptype:
         header += f" is a {ptype} profiling float"
@@ -145,6 +144,7 @@ def build_summary_text(raw: dict, derived: dict) -> str:
         header += f" ({_join([maker, model])})"
     parts.append(header + ".")
 
+    # Owner/PI/project
     owner = _clean(raw.get("owner"))
     pi = _clean(deployment.get("principalInvestigatorName"))
     project = _clean(raw.get("projectName"))
@@ -163,11 +163,13 @@ def build_summary_text(raw: dict, derived: dict) -> str:
     elif project:
         parts.append(f"It is part of the {project} project.")
 
+    # Network
     networks = [n for n in raw.get("networks") or [] if n]
     if networks:
         noun = "network" if len(networks) == 1 else "networks"
         parts.append(f"It belongs to the {_join_natural(networks)} {noun}.")
 
+    # Variables / Measurements and Sensors
     variable_names = resolve_variables(raw.get("variables"))
     if variable_names:
         parts.append(f"It measures {_join_natural(variable_names)}.")
@@ -176,6 +178,7 @@ def build_summary_text(raw: dict, derived: dict) -> str:
     if sensor_names:
         parts.append(f"It is equipped with sensors for: {_join(sensor_names)}.")
 
+    # Launch Date with Ship and Location
     launch_date = deployment.get("launchDate")
     ship = resolve_ship(deployment.get("platform"))
     dep_lat, dep_lon = deployment.get("lat"), deployment.get("lon")
@@ -187,10 +190,12 @@ def build_summary_text(raw: dict, derived: dict) -> str:
             line += f" at latitude {dep_lat}, longitude {dep_lon}"
         parts.append(line + ".")
 
+    # Data Center
     dc_name = data_center.get("name") or data_center.get("code")
     if dc_name:
         parts.append(f"Its data is processed by the {dc_name} data center.")
 
+    # Number of Cycles, Last Cycle with Date and Location
     num_cycle = last_cycle.get("numCycle")
     lc_lat, lc_lon = last_cycle.get("lat"), last_cycle.get("lon")
     lc_date = last_cycle.get("date")
@@ -213,6 +218,7 @@ def build_summary_text(raw: dict, derived: dict) -> str:
             f"{derived['mission_duration_days']} days of mission life."
         )
 
+    # Bottom Measurements
     bottom = last_cycle.get("bottomMeasure") or {}
     if bottom.get("temp") is not None or bottom.get("psal") is not None:
         line = "At its deepest measured point"
@@ -244,6 +250,9 @@ def build_summary_text(raw: dict, derived: dict) -> str:
 
 
 def build_record(raw: dict) -> dict:
+    """Transforms raw ARGO data into a structured record."""
+
+    # Extract fields from raw data
     wmo = raw.get("wmo")
     platform = raw.get("platform") or {}
     deployment = raw.get("deployment") or {}

@@ -101,13 +101,7 @@ def search(
 
     `highlights` is the matched fragment(s) of `highlight_field`, wrapped in
     <em> tags - only for terms matched on the lexical side, so it's skipped
-    in `knn` mode (pass highlight_field=None to disable outright).
-
-    `sea_area`, `ocean_basin`, `sensor`, `status`, `date_min` and `date_max`
-    are optional structured filters (see build_filters). They are applied as
-    Elasticsearch `filter` clauses on both the kNN and the BM25 side, so they
-    are hard constraints - only documents satisfying all of them can be
-    returned - while the free-text query still ranks the survivors."""
+    in `knn` mode (pass highlight_field=None to disable outright)."""
     with timing.stage("es_client_init"):
         client = es_index.get_client()
     with timing.stage("embed"):
@@ -119,6 +113,7 @@ def search(
     kc = knn_clause(vector, k, source, filters=filters)
     fields = list(fields)
 
+    # highlight configuration
     highlight = (
         {
             "fields": {
@@ -135,10 +130,12 @@ def search(
         if highlight_field and mode != "knn"
         else None
     )
+
     search_kwargs = {"index": index, "size": k, "source": fields}
     if highlight:
         search_kwargs["highlight"] = highlight
 
+    # Execute the search query
     with timing.stage("es_query"):
         if mode == "knn":
             resp = client.search(knn=kc, **search_kwargs)
@@ -149,6 +146,7 @@ def search(
             resp = client.search(knn=boosted_kc, query=lexical_query(query, source, filters), **search_kwargs)
     timing.record("es_took", resp["took"] / 1000)
 
+    # Format the results
     with timing.stage("format"):
         results = []
         for hit in resp["hits"]["hits"]:

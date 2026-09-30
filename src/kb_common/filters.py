@@ -1,8 +1,5 @@
-"""Elasticsearch `filter` clauses for the structured (non-free-text) criteria
+"""Elasticsearch `filter` clauses for the structured criteria
 shared by kb_api's hybrid search and kb_mcp's list_* tools.
-
-Deliberately dependency-free (no embedding model, no ES client): the kb-mcp
-image doesn't ship the ML stack that kb_common.hybrid_search pulls in.
 """
 import calendar
 import re
@@ -21,9 +18,7 @@ LAST_CYCLE_DATE_FIELD = "last_cycle_date"
 DEPLOYMENT_DATE_FIELD = "deployment_date"
 
 # `status_code` is a plain (un-normalized) keyword holding the platform status
-# as reported upstream. Friendly words map to the codes/labels that mean the
-# same thing; anything not listed is matched as given. If the index uses other
-# spellings, extend this table - list_argo_statuses shows what is really stored.
+# as reported upstream.
 STATUS_SYNONYMS = {
     "active": ["A", "ACTIVE", "O", "OPERATIONAL"],
     "operational": ["O", "OPERATIONAL", "A", "ACTIVE"],
@@ -36,6 +31,7 @@ DATE_BOUND_PATTERN = r"^\d{4}(-\d{2}(-\d{2})?)?$"
 
 
 def normalize(value: str) -> str:
+    """Normalize a string value for consistent comparison."""
     return value.strip().lower()
 
 
@@ -69,8 +65,7 @@ def _period(text: str) -> tuple[date, date]:
 
 def date_range_clause(field: str, gte: date | str | None = None, lte: date | str | None = None) -> dict:
     """Inclusive range on `field`. Partial dates cover the whole period:
-    gte="2020" starts 2020-01-01 and lte="2020" ends 2020-12-31 (Elasticsearch
-    rounds a partial `lte` up), so a bare year selects that year."""
+    gte="2020" starts 2020-01-01 and lte="2020" ends 2020-12-31"""
     bounds = {"format": "strict_date_optional_time"}
     low = _bound_text(gte) if gte else None
     high = _bound_text(lte) if lte else None
