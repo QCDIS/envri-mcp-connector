@@ -2,6 +2,7 @@
 Every other function talks to Elasticsearch directly via kb_common.es_index.
 """
 import logging
+from datetime import date
 
 import requests
 from elasticsearch import NotFoundError
@@ -63,14 +64,36 @@ def _hits_to_dicts(resp, fields=_SOURCE_FIELDS):
     ]
 
 
-def search(index: str, query: str, k: int = 10, mode: str = "hybrid", source: str | None = None):
+def search(
+    index: str,
+    query: str,
+    k: int = 10,
+    mode: str = "hybrid",
+    source: str | None = None,
+    sea_area: str | None = None,
+    ocean_basin: str | None = None,
+    sensor: str | None = None,
+    status: str | None = None,
+    date_min: date | None = None,
+    date_max: date | None = None,
+):
     """Hybrid (default) / knn / bm25 search, via kb_api's /internal/search.
     `mode` is for the eval script's A/B comparisons; the MCP server always
-    uses hybrid."""
+    uses hybrid. The optional structured filters are only sent when set."""
+    payload = {"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS}
+    structured = {
+        "sea_area": sea_area,
+        "ocean_basin": ocean_basin,
+        "sensor": sensor,
+        "status": status,
+        "date_min": date_min.isoformat() if date_min else None,
+        "date_max": date_max.isoformat() if date_max else None,
+    }
+    payload.update({name: value for name, value in structured.items() if value is not None})
     with timing.stage("api_http"):
         resp = _session.post(
             f"{config.KB_API_URL}/internal/search",
-            json={"query": query, "k": k, "mode": mode, "source": source, "fields": _SOURCE_FIELDS},
+            json=payload,
             headers={"Authorization": f"Bearer {config.KB_MCP_INTERNAL_TOKEN}"},
             timeout=30,
         )

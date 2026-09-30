@@ -71,7 +71,7 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 | `POST /index?source=…` | Background embed + index (`limit`) |
 | `GET /stats` | Document counts per source |
 | `GET /health` | Liveness |
-| `POST /internal/search` | `kb_mcp` only |
+| `POST /internal/search` | `kb_mcp` only (accepts the structured filters below) |
 
 `source` is `euro_argo` or `oso`. Start with `docker compose up -d kb-api` (:8080) or `kb-mcp` (:8765).
 
@@ -79,13 +79,27 @@ Flags: `--limit N` (smoke test), `--force` (re-fetch).
 
 | Tool | Purpose |
 | --- | --- |
-| `search_knowledge_base` | Hybrid semantic + keyword search (calls `kb_api`) |
+| `search_knowledge_base` | Hybrid semantic + keyword search (calls `kb_api`). Optional strict filters: `sea_area`, `ocean_basin`, `sensor`, `status`, `date_min`, `date_max` |
 | `get_argo_float`, `get_oso_entity` | Full record by WMO / OSO id |
 | `find_argo_floats_near`, `find_argo_floats_in_box` | Floats by last known position |
 | `list_argo_floats_by_sea` / `_by_ocean` / `_by_sensor` / `_by_organization` | Floats by region, sensor or operator |
 | `list_oso_entities_by_type` | OSO entities of a given type |
 | `list_seas`, `list_ocean_regions`, `list_oso_entity_types`, `list_field_values` | Discover valid filter values |
 | `get_index_stats` | Document counts per source |
+
+### Structured filters on `search_knowledge_base`
+
+Free text alone can't strictly enforce criteria like "Argo float in the Sea of Japan with an oxygen sensor". The optional filters are applied as Elasticsearch `filter` clauses on **both** the kNN and the BM25 side, so they are hard constraints (not ranking hints), and kNN pre-filters so recall among valid hits isn't reduced. All filters are ANDed together.
+
+| Argument | Matches | Notes |
+| --- | --- | --- |
+| `sea_area` | `sea_area.keyword` | see `list_seas`; case-insensitive |
+| `ocean_basin` | `ocean_region.keyword` | see `list_ocean_regions`; case-insensitive |
+| `sensor` | `sensor_codes` | e.g. `DOXY`; case-insensitive |
+| `status` | `status_code` | un-normalized field; the value as given, upper- and lower-case are tried |
+| `date_min` / `date_max` | `last_cycle_date` | `YYYY-MM-DD`, both inclusive |
+
+Filters target Euro-Argo float fields, so OSO records are excluded whenever one is set.
 
 ## Benchmarks
 

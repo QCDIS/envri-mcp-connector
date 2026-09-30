@@ -21,13 +21,13 @@ _TTL_MULTILINGUAL_LABEL = b"""
 
 def test_discover_needed_collections_always_includes_base(tmp_path):
     missing = tmp_path / "missing.owl"
-    assert nerc_vocab.discover_needed_collections(missing) == {"R25"}
+    assert nerc_vocab.discover_needed_collections(missing) == {"C17", "R03", "R25"}
 
 
 def test_discover_needed_collections_finds_referenced_codes(tmp_path):
     owl = tmp_path / "oso.owl"
     owl.write_text("some xml with http://vocab.nerc.ac.uk/collection/L05/current/1234/ inside")
-    assert nerc_vocab.discover_needed_collections(owl) == {"R25", "L05"}
+    assert nerc_vocab.discover_needed_collections(owl) == {"C17", "L05", "R03", "R25"}
 
 
 def test_parse_collection_extracts_pref_label_and_definition():

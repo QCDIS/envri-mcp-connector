@@ -4,10 +4,11 @@ Run directly:
     PYTHONPATH=src python -m kb_api.main
 """
 from contextlib import asynccontextmanager
-from typing import Literal
+from datetime import date
+from typing import Annotated, Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from kb_api import config
 from kb_api.auth import rate_limited, rate_limited_admin
@@ -83,6 +84,9 @@ def search(
     return [format_hit(hit, include_vector=include_vectors) for hit in hits]
 
 
+FilterText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
 class InternalSearchRequest(BaseModel):
     query: str = Field(min_length=1)
     k: int = Field(10, ge=1, le=100)
@@ -90,6 +94,19 @@ class InternalSearchRequest(BaseModel):
     source: str | None = None
     fields: list[str] = list(hybrid_search.DEFAULT_FIELDS)
     highlight_field: str | None = "summary_text"
+    # Optional structured filters, enforced as Elasticsearch `filter` clauses.
+    sea_area: FilterText | None = None
+    ocean_basin: FilterText | None = None
+    sensor: FilterText | None = None
+    status: FilterText | None = None
+    date_min: date | None = None
+    date_max: date | None = None
+
+    @model_validator(mode="after")
+    def _check_date_range(self):
+        if self.date_min and self.date_max and self.date_min > self.date_max:
+            raise ValueError("date_min must not be after date_max")
+        return self
 
 
 @app.post("/internal/search")
@@ -103,6 +120,12 @@ def internal_search(req: InternalSearchRequest, _caller: str = Depends(rate_limi
         source=req.source,
         fields=tuple(req.fields),
         highlight_field=req.highlight_field,
+        sea_area=req.sea_area,
+        ocean_basin=req.ocean_basin,
+        sensor=req.sensor,
+        status=req.status,
+        date_min=req.date_min,
+        date_max=req.date_max,
     )
 
 

@@ -1,3 +1,5 @@
+from datetime import date
+
 from elasticsearch import NotFoundError
 
 from kb_mcp import search
@@ -100,6 +102,40 @@ def test_search_sends_bearer_token_and_query(monkeypatch):
     assert captured["headers"] == {"Authorization": "Bearer internal-token-abc"}
     assert captured["json"]["query"] == "float temperature"
     assert captured["json"]["k"] == 5
+
+
+def test_search_forwards_structured_filters(monkeypatch):
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return _FakeResponse([])
+
+    monkeypatch.setattr(search._session, "post", fake_post)
+
+    search.search(
+        "idx", "float", sea_area="Sea of Japan", ocean_basin="Pacific Ocean", sensor="DOXY",
+        status="O", date_min=date(2024, 1, 1), date_max=date(2024, 12, 31),
+    )
+
+    assert captured["json"]["sea_area"] == "Sea of Japan"
+    assert captured["json"]["ocean_basin"] == "Pacific Ocean"
+    assert captured["json"]["sensor"] == "DOXY"
+    assert captured["json"]["status"] == "O"
+    assert captured["json"]["date_min"] == "2024-01-01"
+    assert captured["json"]["date_max"] == "2024-12-31"
+
+
+def test_search_omits_unset_filters_from_payload(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        search._session, "post", lambda url, json=None, **k: captured.update(json=json) or _FakeResponse([])
+    )
+
+    search.search("idx", "float")
+
+    for name in ("sea_area", "ocean_basin", "sensor", "status", "date_min", "date_max"):
+        assert name not in captured["json"]
 
 
 def test_search_attaches_url_to_each_result(monkeypatch):

@@ -9,6 +9,7 @@ guess an internal index name.
 """
 import functools
 import logging
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import Field
@@ -115,9 +116,53 @@ def search_knowledge_base(
     query: Annotated[str, Field(min_length=1, max_length=1000)],
     source: Source | None = None,
     k: Limit = 10,
+    sea_area: Annotated[str | None, Field(
+        min_length=1, max_length=200,
+        description='Specific named sea, e.g. "Sea of Japan" (see list_seas for valid values). Case-insensitive.',
+    )] = None,
+    ocean_basin: Annotated[str | None, Field(
+        min_length=1, max_length=200,
+        description='Broad ocean basin, e.g. "Pacific Ocean" (see list_ocean_regions). Case-insensitive.',
+    )] = None,
+    sensor: Annotated[str | None, Field(
+        min_length=1, max_length=200,
+        description='Sensor code the float must carry, e.g. "DOXY" (see list_field_values sensor_codes). Case-insensitive.',
+    )] = None,
+    status: Annotated[str | None, Field(
+        min_length=1, max_length=200,
+        description="Platform status code exactly as in a float record's status_code field (upper/lower case both match).",
+    )] = None,
+    date_min: Annotated[date | None, Field(
+        description="Only floats whose last reported cycle is on/after this date (YYYY-MM-DD).",
+    )] = None,
+    date_max: Annotated[date | None, Field(
+        description="Only floats whose last reported cycle is on/before this date (YYYY-MM-DD), inclusive.",
+    )] = None,
 ) -> list[dict]:
-    """Hybrid semantic + keyword search across the knowledge base."""
-    return search.search(common_config.ES_INDEX, query, k=k, source=source)
+    """Hybrid semantic + keyword search across the knowledge base.
+
+    The optional sea_area, ocean_basin, sensor, status, date_min and date_max
+    arguments are strict filters, not ranking hints: only records matching ALL
+    of them are returned, and the free-text query ranks those. Use them
+    whenever the question names a region, sensor, status or period (e.g.
+    "Argo floats in the Sea of Japan with oxygen sensors"). They apply to
+    Euro-Argo floats, so OSO records are excluded when any is set. Casing and
+    surrounding whitespace don't matter.
+    """
+    if date_min and date_max and date_min > date_max:
+        raise ValueError("date_min must not be after date_max")
+    return search.search(
+        common_config.ES_INDEX,
+        query,
+        k=k,
+        source=source,
+        sea_area=sea_area,
+        ocean_basin=ocean_basin,
+        sensor=sensor,
+        status=status,
+        date_min=date_min,
+        date_max=date_max,
+    )
 
 
 @mcp.tool()

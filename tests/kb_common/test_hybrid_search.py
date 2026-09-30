@@ -1,3 +1,5 @@
+from datetime import date
+
 from kb_common import hybrid_search
 
 
@@ -145,3 +147,104 @@ def test_search_disabling_highlight_field_omits_highlights_key(monkeypatch):
     results = hybrid_search.search("kb-index", "float temperature", highlight_field=None)
 
     assert "highlights" not in results[0]
+
+
+# --- structured filters ---
+
+
+def test_build_filters_empty_when_nothing_set():
+    assert hybrid_search.build_filters() == []
+
+
+def test_build_filters_normalizes_case_and_whitespace_on_keyword_fields():
+    filters = hybrid_search.build_filters(sea_area="  Sea of Japan ", ocean_basin="PACIFIC Ocean", sensor="DOXY")
+    assert filters == [
+        {"term": {"sea_area.keyword": "sea of japan"}},
+        {"term": {"ocean_region.keyword": "pacific ocean"}},
+        {"term": {"sensor_codes": "doxy"}},
+    ]
+
+
+def test_build_filters_status_matches_common_casings():
+    (clause,) = hybrid_search.build_filters(status=" Active ")
+    assert clause == {"terms": {"status_code": ["Active", "ACTIVE", "active"]}}
+
+
+def test_build_filters_status_single_letter_deduplicates():
+    (clause,) = hybrid_search.build_filters(status="O")
+    assert clause == {"terms": {"status_code": ["O", "o"]}}
+
+
+def test_build_filters_date_range_is_inclusive_and_format_pinned():
+    (clause,) = hybrid_search.build_filters(date_min=date(2024, 1, 1), date_max="2024-12-31")
+    assert clause == {
+        "range": {"last_cycle_date": {"format": "strict_date_optional_time", "gte": "2024-01-01", "lte": "2024-12-31"}}
+    }
+
+
+def test_build_filters_one_sided_date_range():
+    (lo,) = hybrid_search.build_filters(date_min=date(2024, 1, 1))
+    (hi,) = hybrid_search.build_filters(date_max=date(2024, 1, 1))
+    assert "lte" not in lo["range"]["last_cycle_date"] and lo["range"]["last_cycle_date"]["gte"] == "2024-01-01"
+    assert "gte" not in hi["range"]["last_cycle_date"] and hi["range"]["last_cycle_date"]["lte"] == "2024-01-01"
+
+
+def test_knn_clause_combines_source_and_structured_filters_as_list():
+    filters = hybrid_search.build_filters(sea_area="Black Sea")
+    clause = hybrid_search.knn_clause([0.1], k=5, source="euro_argo", filters=filters)
+    assert clause["filter"] == [{"term": {"source": "euro_argo"}}, {"term": {"sea_area.keyword": "black sea"}}]
+
+
+def test_knn_clause_single_structured_filter_stays_a_plain_query():
+    clause = hybrid_search.knn_clause([0.1], k=5, filters=hybrid_search.build_filters(sensor="DOXY"))
+    assert clause["filter"] == {"term": {"sensor_codes": "doxy"}}
+
+
+def test_lexical_query_with_structured_filters_wraps_in_bool_filter():
+    filters = hybrid_search.build_filters(sea_area="Sea of Japan", status="O")
+    query = hybrid_search.lexical_query("Argo float JMA", filters=filters)
+    assert "dis_max" in query["bool"]["must"]
+    assert query["bool"]["filter"] == filters
+
+
+def test_lexical_query_source_and_filters_combine():
+    filters = hybrid_search.build_filters(ocean_basin="Pacific Ocean")
+    query = hybrid_search.lexical_query("x", source="euro_argo", filters=filters)
+    assert query["bool"]["filter"][0] == {"term": {"source": "euro_argo"}}
+    assert query["bool"]["filter"][1] == filters[0]
+
+
+def test_search_hybrid_applies_filters_to_both_knn_and_query(monkeypatch):
+    client = _patch_search_deps(monkeypatch)
+    hybrid_search.search(
+        "kb-index", "float processed by JMA", sea_area="Sea of Japan", sensor="DOXY", date_min=date(2023, 1, 1)
+    )
+
+    call = client.calls[0]
+    expected = [
+        {"term": {"sea_area.keyword": "sea of japan"}},
+        {"term": {"sensor_codes": "doxy"}},
+        {"range": {"last_cycle_date": {"format": "strict_date_optional_time", "gte": "2023-01-01"}}},
+    ]
+    assert call["knn"]["filter"] == expected
+    assert call["query"]["bool"]["filter"] == expected
+    assert call["knn"]["boost"] == hybrid_search.KNN_HYBRID_BOOST
+
+
+def test_search_knn_and_bm25_modes_also_filter(monkeypatch):
+    client = _patch_search_deps(monkeypatch)
+    hybrid_search.search("kb-index", "x", mode="knn", ocean_basin="Pacific Ocean")
+    hybrid_search.search("kb-index", "x", mode="bm25", ocean_basin="Pacific Ocean")
+
+    clause = {"term": {"ocean_region.keyword": "pacific ocean"}}
+    assert client.calls[0]["knn"]["filter"] == clause
+    assert client.calls[1]["query"]["bool"]["filter"] == clause
+
+
+def test_search_without_filters_is_unchanged(monkeypatch):
+    client = _patch_search_deps(monkeypatch)
+    hybrid_search.search("kb-index", "float temperature")
+
+    call = client.calls[0]
+    assert "filter" not in call["knn"]
+    assert "bool" not in call["query"]

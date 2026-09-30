@@ -78,7 +78,9 @@ def test_search_knowledge_base_forwards_params(monkeypatch):
     monkeypatch.setattr(
         server.search,
         "search",
-        lambda index, query, k=10, source=None: captured.update(index=index, query=query, k=k, source=source) or [],
+        lambda index, query, k=10, source=None, **filters: captured.update(
+            index=index, query=query, k=k, source=source, filters=filters
+        ) or [],
     )
 
     _call_tool("search_knowledge_base", {"query": "floats near Ifremer", "k": 5, "source": "euro_argo"})
@@ -86,6 +88,55 @@ def test_search_knowledge_base_forwards_params(monkeypatch):
     assert captured["query"] == "floats near Ifremer"
     assert captured["k"] == 5
     assert captured["source"] == "euro_argo"
+
+
+def test_search_knowledge_base_forwards_structured_filters(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(server.search, "search", lambda index, query, **kw: captured.update(kw) or [])
+
+    _call_tool(
+        "search_knowledge_base",
+        {
+            "query": "Argo float processed by JMA",
+            "sea_area": "Sea of Japan",
+            "ocean_basin": "Pacific Ocean",
+            "sensor": "DOXY",
+            "status": "O",
+            "date_min": "2023-01-01",
+            "date_max": "2023-12-31",
+        },
+    )
+
+    assert captured["sea_area"] == "Sea of Japan"
+    assert captured["ocean_basin"] == "Pacific Ocean"
+    assert captured["sensor"] == "DOXY"
+    assert captured["status"] == "O"
+    assert captured["date_min"].isoformat() == "2023-01-01"
+    assert captured["date_max"].isoformat() == "2023-12-31"
+
+
+def test_search_knowledge_base_filters_default_to_none(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(server.search, "search", lambda index, query, **kw: captured.update(kw) or [])
+
+    _call_tool("search_knowledge_base", {"query": "x"})
+
+    assert all(captured[name] is None for name in ("sea_area", "ocean_basin", "sensor", "status", "date_min", "date_max"))
+
+
+def test_search_knowledge_base_rejects_blank_filter():
+    with pytest.raises(ToolError):
+        _call_tool("search_knowledge_base", {"query": "x", "sea_area": ""})
+
+
+def test_search_knowledge_base_rejects_malformed_date():
+    with pytest.raises(ToolError):
+        _call_tool("search_knowledge_base", {"query": "x", "date_min": "last spring"})
+
+
+def test_search_knowledge_base_rejects_inverted_date_range():
+    with pytest.raises(ToolError):
+        _call_tool("search_knowledge_base", {"query": "x", "date_min": "2024-06-01", "date_max": "2024-01-01"})
 
 
 def test_get_argo_float_builds_correct_doc_id(monkeypatch):
