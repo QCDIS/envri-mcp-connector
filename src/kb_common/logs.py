@@ -1,9 +1,5 @@
 """Single logging setup shared by every entrypoint (kb_api, kb_mcp, the
-fetch/pipeline CLIs). Library modules only do `logging.getLogger(__name__)`
-- they never configure logging themselves.
-
-Uvicorn should be started with `log_config=None` so its `uvicorn.*` loggers
-propagate to the root handler installed here instead of getting their own.
+fetch/pipeline CLIs).
 """
 import logging
 from collections.abc import Iterable
@@ -12,18 +8,13 @@ from kb_common import config
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
-# Chatty at INFO (one line per HTTP request to Elasticsearch / kb_api).
 _QUIET_LOGGERS = ("elastic_transport", "urllib3", "httpx")
 
 _configured = False
 
 
 class EndpointFilter(logging.Filter):
-    """Drops uvicorn access-log records for the given request paths.
-
-    Uvicorn logs access lines as `'%s - "%s %s HTTP/%s" %d'` with args
-    `(client, method, path_with_query, http_version, status)`.
-    """
+    """Drops uvicorn access-log records for the given request paths."""
 
     def __init__(self, excluded_paths: Iterable[str]):
         super().__init__()
@@ -37,8 +28,8 @@ class EndpointFilter(logging.Filter):
 
 
 def setup_logging(level: str | None = None, excluded_paths: Iterable[str] | None = None) -> None:
-    """Configures the root logger and the uvicorn access-log filter. Safe to
-    call more than once - only the first call has any effect."""
+    """Configures the root logger and the uvicorn access-log filter."""
+
     global _configured
     if _configured:
         return

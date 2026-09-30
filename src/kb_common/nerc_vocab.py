@@ -1,6 +1,6 @@
 """Resolve NERC NVS (vocab.nerc.ac.uk) concept URIs to human-readable labels.
 
-Usage (run locally, where the NVS turtles zip lives):
+Usage (use https://github.com/Artemis-IA/nerc-nvs-collections to download the NVS data):
     PYTHONPATH=src python -m kb_common.nerc_vocab --zip /path/to/turtles.zip
 """
 import argparse
@@ -26,6 +26,8 @@ _COLLECTION_RE = re.compile(r"vocab\.nerc\.ac\.uk/collection/([A-Za-z0-9]+)/")
 
 
 def discover_needed_collections(owl_path: Path) -> set:
+    """Discovers the collections needed to parse the given OWL file."""
+
     collections = set(BASE_COLLECTIONS)
     if owl_path.exists():
         text = owl_path.read_text(errors="ignore")
@@ -34,6 +36,8 @@ def discover_needed_collections(owl_path: Path) -> set:
 
 
 def _parse_collection(ttl_bytes: bytes) -> dict:
+    """Parses a collection of SKOS concepts from the given TTL bytes."""
+
     g = rdflib.Graph()
     g.parse(data=ttl_bytes, format="turtle")
     entries = {}
@@ -56,6 +60,8 @@ def _parse_collection(ttl_bytes: bytes) -> dict:
 
 
 def build_cache(zip_path: Path, owl_path: Path = None, out_path: Path = CACHE_PATH) -> dict:
+    """Builds the NERC cache from the given ZIP file and OWL file."""
+
     owl_path = owl_path or Path("data/cache/oso/oso.owl")
     needed = discover_needed_collections(owl_path)
     log.info("resolving NERC collections: %s", sorted(needed))

@@ -13,6 +13,7 @@ _PUNCT_RE = re.compile(r"[^a-z0-9 ]+")
 
 
 def normalize(name: str) -> str:
+    """Normalize a name string for matching against OSO Organization individuals."""
     if not name:
         return ""
     name = name.lower()
@@ -36,6 +37,7 @@ def build_oso_org_index() -> dict:
 
 
 def _substring_match(norm_name: str, index: dict) -> str | None:
+    """Find a match for the normalized name in the OSO index."""
     for norm_label, oso_id in index.items():
         if len(norm_label) < _MIN_MATCH_LEN:
             continue
@@ -45,6 +47,7 @@ def _substring_match(norm_name: str, index: dict) -> str | None:
 
 
 def match_organization(*candidates, index: dict = None) -> str | None:
+    """Match an organization name against the OSO index, returning the OSO ID if a match is found."""
     index = index if index is not None else build_oso_org_index()
     for candidate in candidates:
         norm = normalize(candidate)
@@ -59,6 +62,7 @@ def match_organization(*candidates, index: dict = None) -> str | None:
 
 
 def _report():
+    """Report on the OSO organization index and match results."""
     from kb_argo import transform as argo_transform  # deferred: avoids a transform<->link_oso import cycle
 
     index = build_oso_org_index()

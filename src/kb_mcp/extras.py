@@ -19,6 +19,7 @@ _MAX_VALUES = 500
 
 
 class ValueList(NamedTuple):
+    """Represents a value list resource for the MCP server."""
     slug: str
     title: str
     description: str
@@ -80,6 +81,7 @@ VALUE_LISTS = (
 
 
 def read_value_list(spec: ValueList) -> str:
+    """Reads the value list for the given spec and returns it as a JSON string."""
     values = search.terms_agg(common_config.ES_INDEX, spec.field, _MAX_VALUES, spec.source_filter)
     return json.dumps(
         {"name": spec.slug, "description": spec.description, "used_by": list(spec.used_by), "values": values},
@@ -89,6 +91,8 @@ def read_value_list(spec: ValueList) -> str:
 
 
 def read_sources() -> str:
+    """Reads the sources for the knowledge base and returns them as a JSON string."""
+
     stats = search.index_stats(common_config.ES_INDEX)
     return json.dumps(
         {

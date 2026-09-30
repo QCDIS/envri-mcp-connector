@@ -1,15 +1,7 @@
 """Typed result models for the MCP tools.
 
 The MCP SDK publishes each tool's `outputSchema` from its return annotation and
-validates every result against it before it goes on the wire. The models are
-deliberately tolerant - every field is optional and unknown fields are kept
-(`extra="allow"`) - so an index document with an unexpected value can't turn a
-successful lookup into a validation error, while the fields clients rely on
-still have a declared name and type.
-
-Documents come back with an `_id` key; pydantic disallows leading-underscore
-field names, so it is declared as `id` with the alias `_id` (the SDK
-serializes by alias, so the wire format is unchanged).
+validates every result against it before it goes on the wire.
 """
 from typing import Annotated
 

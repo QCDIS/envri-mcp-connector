@@ -42,6 +42,7 @@ app = FastAPI(title="Ifremer Knowledge Base API", lifespan=_lifespan)
 async def _timing_middleware(request: Request, call_next):
     if not common_config.LOG_TIMING:
         return await call_next(request)
+
     with timing.request() as stages:
         with timing.stage("api_total"):
             response = await call_next(request)
@@ -111,7 +112,7 @@ class InternalSearchRequest(BaseModel):
 
 @app.post("/internal/search")
 def internal_search(req: InternalSearchRequest, _caller: str = Depends(rate_limited)) -> list[dict]:
-    """Used by kb_mcp only - not the public search contract, see module docstring."""
+    """Used by kb_mcp - see module docstring."""
     return hybrid_search.search(
         common_config.ES_INDEX,
         req.query,

@@ -58,6 +58,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+    # comment this part if not using GPU
     deploy:
       resources:
         reservations:

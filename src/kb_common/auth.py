@@ -8,6 +8,7 @@ load_dotenv()
 
 
 def _parse_tokens(raw: str) -> dict[str, str]:
+    """Parses a comma-separated list of `name:token` entries into a dict."""
     tokens: dict[str, str] = {}
     for entry in raw.split(","):
         name, _, token = entry.strip().partition(":")
@@ -22,6 +23,7 @@ _ADMIN_TOKENS = _parse_tokens(os.environ.get("KB_ADMIN_TOKENS", ""))
 
 
 def _lookup(tokens: dict[str, str], presented: str) -> str | None:
+    """Looks up a token in the given dict, returning the corresponding name if found."""
     for name, token in tokens.items():
         if secrets.compare_digest(token, presented):
             return name

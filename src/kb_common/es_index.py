@@ -17,8 +17,7 @@ log = logging.getLogger(__name__)
 # Keyword fields that back exact-match filters/facets use this normalizer, so
 # "black sea", "BLACK SEA" and "Black Sea" all hit the same terms. Elasticsearch
 # applies it at index time and to term-level queries at search time; `_source`
-# keeps the original casing. Note terms aggregations return the *normalized*
-# (lowercase) keys - see kb_mcp.search.terms_agg.
+# keeps the original casing.
 LOWERCASE_NORMALIZER = "lowercase"
 
 INDEX_SETTINGS = {
@@ -31,10 +30,12 @@ INDEX_SETTINGS = {
 
 
 def lowercase_keyword() -> dict:
+    """Returns a keyword field that is case-insensitive."""
     return {"type": "keyword", "normalizer": LOWERCASE_NORMALIZER}
 
 
 def text_and_lowercase_keyword() -> dict:
+    """Returns a text field with a case-insensitive `.keyword` sub-field."""
     """`text` (analyzed, for scoring) + case-insensitive `.keyword` sub-field
     (for exact filters and aggregations)."""
     return {"type": "text", "fields": {"keyword": lowercase_keyword()}}
@@ -101,9 +102,9 @@ def _index_embedding_state(client: Elasticsearch, index: str):
 
 
 def find_embedding_mismatches(meta: dict, mapped_dims, model: str, dims: int) -> list[str]:
-    """Human-readable problems between the index's recorded embedding setup
+    """Human-readable errors between the index's recorded embedding setup
     (`_meta` + the actual dense_vector mapping) and the configured `model` /
-    `dims`. Empty list = compatible."""
+    `dims`."""
     problems = []
     indexed_model = meta.get("embedding_model")
     indexed_dims = meta.get("embedding_dims")
@@ -153,9 +154,12 @@ def verify_embedding_model(client: Elasticsearch, model: str, dims: int, index: 
 
 
 def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None, index: str = None, embedding_model: str = None):
+    """Ensure the index exists and has the correct embedding setup, creating it if necessary."""
     index = index or config.ES_INDEX
     embedding_model = embedding_model or config.EMBEDDING_MODEL
     state = _index_embedding_state(client, index)
+
+    # If the index doesn't exist, create it with the correct embedding setup.
     if state is None:
         client.indices.create(index=index, body=build_mapping(dims, extra_properties, embedding_model))
         log.info("created index %s (dims=%d, model=%s)", index, dims, embedding_model)
@@ -167,6 +171,7 @@ def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None
     if problems:
         raise _mismatch_error(index, problems)
 
+    # Update the index mapping to match the desired embedding setup.
     try:
         client.indices.put_mapping(
             index=index,
@@ -184,12 +189,14 @@ def ensure_index(client: Elasticsearch, dims: int, extra_properties: dict = None
 def index_stats(index: str = None) -> dict:
     index = index or config.ES_INDEX
     client = get_client()
+
     resp = client.search(
         index=index,
         size=0,
         aggs={"by_source": {"terms": {"field": "source", "size": 10}}},
         track_total_hits=True,
     )
+
     total = resp["hits"]["total"]["value"]
     by_source = {b["key"]: b["doc_count"] for b in resp["aggregations"]["by_source"]["buckets"]}
     return {"total": total, "by_source": by_source}
@@ -199,6 +206,7 @@ def bulk_index(client: Elasticsearch, documents: list[dict], index: str = None):
     """Stamps every document with `indexed_at` (now, UTC) before writing."""
     index = index or config.ES_INDEX
     now = datetime.now(timezone.utc).isoformat()
+
     actions = [
         {
             "_index": index,
@@ -207,7 +215,10 @@ def bulk_index(client: Elasticsearch, documents: list[dict], index: str = None):
         }
         for doc in documents
     ]
+
     ok, errors = helpers.bulk(client, actions, raise_on_error=False)
+
     if errors:
         log.warning("%d documents failed to index: %s", len(errors), errors[:5])
+
     return ok, errors

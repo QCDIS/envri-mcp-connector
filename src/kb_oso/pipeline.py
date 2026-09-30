@@ -20,6 +20,7 @@ CHUNK_SIZE = 128
 
 
 def chunked(iterable, size):
+    """Yields chunks of the given size from the iterable."""
     it = iter(iterable)
     while True:
         chunk = list(itertools.islice(it, size))
@@ -29,6 +30,8 @@ def chunked(iterable, size):
 
 
 def run_index(limit: int | None = None):
+    """Indexes the OSO ontology into Elasticsearch."""
+
     client = es_index.get_client()
     ensured = False
 

@@ -33,8 +33,7 @@ _IDENTIFIER_PREDICATES = {
 }
 
 # Some OSO revisions use the British spelling for a type that's otherwise
-# American elsewhere in the same ontology; canonicalize so summaries don't
-# read "is an organization, organisation."
+# American elsewhere in the same ontology."
 _TYPE_ALIASES = {
     "Organisation": "Organization",
 }
@@ -148,8 +147,7 @@ def build_summary_text(g: rdflib.Graph, subject, label_index: dict, pref_label: 
             grouped.setdefault(p, []).append(resolve_label(o, label_index))
 
     # A predicate tagged with several languages is free text translated
-    # multiple times (e.g. rdfs:comment, dcterms:description) - keep only
-    # one language's values rather than concatenating every translation.
+    # multiple times (e.g. rdfs:comment, dcterms:description).
     for p, lang_map in literals_by_lang.items():
         if len(lang_map) > 1:
             chosen_lang = next((l for l in _LANG_PREFERENCE if l in lang_map), next(iter(lang_map)))

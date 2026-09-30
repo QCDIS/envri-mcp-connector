@@ -1,6 +1,6 @@
 [project]
 name = "ifremer-knowledge-base"
-version = "0.1.0"
+version = "0.2.0"
 description = "Euro-Argo floats + OSO ontology in one Elasticsearch index, embedded for RAG, served via an HTTP API and an MCP server."
 requires-python = ">=3.12"
 license = "Apache-2.0"
