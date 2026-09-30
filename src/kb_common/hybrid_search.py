@@ -3,6 +3,8 @@ scripts/benchmarks/bench_retrieval.py reach it over HTTP via kb_api's /internal/
 
 Combines `knn` + `query` in one Elasticsearch request (native score summing)
 """
+from datetime import date
+
 from kb_common import embed, es_index, timing
 
 DEFAULT_FIELDS = ("source", "summary_text")
@@ -30,11 +32,83 @@ def _strip_noise_words(query_text: str) -> str:
 
 KNN_HYBRID_BOOST = 15.0
 
+# Structured filter arguments -> the indexed field each one is enforced on.
+# sea_area / ocean_region / sensor_codes carry the lowercase normalizer (see
+# kb_common.es_index), so their term queries take a lowercased value.
+FILTER_FIELDS = {
+    "sea_area": "sea_area.keyword",
+    "ocean_basin": "ocean_region.keyword",
+    "sensor": "sensor_codes",
+}
+STATUS_FIELD = "status_code"
+DATE_FIELD = "last_cycle_date"
 
-def knn_clause(vector: list[float], k: int, source: str | None = None, boost: float | None = None) -> dict:
-    clause = {"field": "embedding", "query_vector": vector, "k": k, "num_candidates": max(50, k * 10)}
+
+def _normalize(value: str) -> str:
+    return value.strip().lower()
+
+
+def _status_variants(value: str) -> list[str]:
+    """`status_code` is a plain (un-normalized) keyword, so match the value as
+    given plus its upper/lower-case forms rather than guessing the casing."""
+    value = value.strip()
+    return list(dict.fromkeys([value, value.upper(), value.lower()]))
+
+
+def _iso(value: date | str) -> str:
+    return value.isoformat() if isinstance(value, date) else value.strip()
+
+
+def build_filters(
+    source: str | None = None,
+    sea_area: str | None = None,
+    ocean_basin: str | None = None,
+    sensor: str | None = None,
+    status: str | None = None,
+    date_min: date | str | None = None,
+    date_max: date | str | None = None,
+) -> list[dict]:
+    """Elasticsearch filter clauses (non-scoring, strictly enforced) for the
+    structured arguments; unset arguments add nothing. `date_min`/`date_max`
+    bound the float's last reported cycle date, both inclusive (a date-only
+    `date_max` covers the whole day)."""
+    filters = []
     if source:
-        clause["filter"] = {"term": {"source": source}}
+        filters.append({"term": {"source": source}})
+    for arg, value in (("sea_area", sea_area), ("ocean_basin", ocean_basin), ("sensor", sensor)):
+        if value:
+            filters.append({"term": {FILTER_FIELDS[arg]: _normalize(value)}})
+    if status:
+        filters.append({"terms": {STATUS_FIELD: _status_variants(status)}})
+    if date_min or date_max:
+        bounds = {"format": "strict_date_optional_time"}
+        if date_min:
+            bounds["gte"] = _iso(date_min)
+        if date_max:
+            bounds["lte"] = _iso(date_max)
+        filters.append({"range": {DATE_FIELD: bounds}})
+    return filters
+
+
+def _as_filter(filters: list[dict]):
+    """A single clause stays a plain query; several become a list (both are
+    valid for `bool.filter` and for a knn clause's `filter`)."""
+    return filters[0] if len(filters) == 1 else filters
+
+
+def knn_clause(
+    vector: list[float],
+    k: int,
+    source: str | None = None,
+    boost: float | None = None,
+    filters: list[dict] | None = None,
+) -> dict:
+    clause = {"field": "embedding", "query_vector": vector, "k": k, "num_candidates": max(50, k * 10)}
+    all_filters = build_filters(source=source) + list(filters or [])
+    if all_filters:
+        # kNN pre-filters: the k nearest neighbours are taken among documents
+        # that already satisfy every constraint, so filtering never starves recall.
+        clause["filter"] = _as_filter(all_filters)
     if boost is not None:
         clause["boost"] = boost
     return clause
@@ -47,7 +121,7 @@ def hybrid_knn_size(k: int) -> int:
     return max(k, KNN_HYBRID_CANDIDATES)
 
 
-def lexical_query(query_text: str, source: str | None = None) -> dict:
+def lexical_query(query_text: str, source: str | None = None, filters: list[dict] | None = None) -> dict:
     stripped_query = _strip_noise_words(query_text) or query_text
     base = {
         "dis_max": {
@@ -58,8 +132,9 @@ def lexical_query(query_text: str, source: str | None = None) -> dict:
             "tie_breaker": 0.3,
         }
     }
-    if source:
-        return {"bool": {"must": base, "filter": {"term": {"source": source}}}}
+    all_filters = build_filters(source=source) + list(filters or [])
+    if all_filters:
+        return {"bool": {"must": base, "filter": _as_filter(all_filters)}}
     return base
 
 
@@ -71,18 +146,34 @@ def search(
     source: str | None = None,
     fields: tuple[str, ...] = DEFAULT_FIELDS,
     highlight_field: str | None = "summary_text",
+    sea_area: str | None = None,
+    ocean_basin: str | None = None,
+    sensor: str | None = None,
+    status: str | None = None,
+    date_min: date | str | None = None,
+    date_max: date | str | None = None,
 ) -> list[dict]:
     """Hybrid (default) / knn / bm25 search. Returns a list of
     {"_id", "score", "highlights", <requested fields>...} dicts.
 
     `highlights` is the matched fragment(s) of `highlight_field`, wrapped in
     <em> tags - only for terms matched on the lexical side, so it's skipped
-    in `knn` mode (pass highlight_field=None to disable outright)."""
+    in `knn` mode (pass highlight_field=None to disable outright).
+
+    `sea_area`, `ocean_basin`, `sensor`, `status`, `date_min` and `date_max`
+    are optional structured filters (see build_filters). They are applied as
+    Elasticsearch `filter` clauses on both the kNN and the BM25 side, so they
+    are hard constraints - only documents satisfying all of them can be
+    returned - while the free-text query still ranks the survivors."""
     with timing.stage("es_client_init"):
         client = es_index.get_client()
     with timing.stage("embed"):
         vector = embed.embed_query(query)
-    kc = knn_clause(vector, k, source)
+    filters = build_filters(
+        sea_area=sea_area, ocean_basin=ocean_basin, sensor=sensor, status=status,
+        date_min=date_min, date_max=date_max,
+    )
+    kc = knn_clause(vector, k, source, filters=filters)
     fields = list(fields)
 
     highlight = (
@@ -109,10 +200,10 @@ def search(
         if mode == "knn":
             resp = client.search(knn=kc, **search_kwargs)
         elif mode == "bm25":
-            resp = client.search(query=lexical_query(query, source), **search_kwargs)
+            resp = client.search(query=lexical_query(query, source, filters), **search_kwargs)
         else:
-            boosted_kc = knn_clause(vector, hybrid_knn_size(k), source, boost=KNN_HYBRID_BOOST)
-            resp = client.search(knn=boosted_kc, query=lexical_query(query, source), **search_kwargs)
+            boosted_kc = knn_clause(vector, hybrid_knn_size(k), source, boost=KNN_HYBRID_BOOST, filters=filters)
+            resp = client.search(knn=boosted_kc, query=lexical_query(query, source, filters), **search_kwargs)
     timing.record("es_took", resp["took"] / 1000)
 
     with timing.stage("format"):
