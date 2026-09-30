@@ -97,7 +97,7 @@ Free text alone can't strictly enforce criteria like "Argo float in the Sea of J
 | `sea_area` | `sea_area.keyword` | see `list_seas`; case-insensitive |
 | `ocean_basin` | `ocean_region.keyword` | see `list_ocean_regions`; case-insensitive |
 | `sensor` | `sensor_codes` | e.g. `DOXY`; case-insensitive |
-| `status` | `status_code` | un-normalized field; `active`/`inactive`/`closed` expand to the stored codes (see `STATUS_SYNONYMS` in `kb_common/filters.py`), anything else is matched as given in as-is/upper/lower case; see `list_argo_statuses` |
+| `status` | `status_code` | un-normalized field; `active`/`inactive` expand to the stored codes (see `STATUS_SYNONYMS` in `kb_common/filters.py`), anything else is matched as given in as-is/upper/lower case; see `list_argo_statuses` |
 | `date_min` / `date_max` | `last_cycle_date` | `YYYY-MM-DD`, both inclusive |
 
 Filters target Euro-Argo float fields, so OSO records are excluded whenever one is set.

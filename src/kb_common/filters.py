@@ -28,7 +28,6 @@ STATUS_SYNONYMS = {
     "active": ["A", "ACTIVE", "O", "OPERATIONAL"],
     "operational": ["O", "OPERATIONAL", "A", "ACTIVE"],
     "inactive": ["I", "INACTIVE"],
-    "closed": ["C", "CLOSED"],
 }
 
 # YYYY, YYYY-MM or YYYY-MM-DD
