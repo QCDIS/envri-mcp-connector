@@ -165,14 +165,15 @@ def test_build_filters_normalizes_case_and_whitespace_on_keyword_fields():
     ]
 
 
-def test_build_filters_status_matches_common_casings():
+def test_build_filters_status_expands_friendly_word_to_stored_spellings():
     (clause,) = hybrid_search.build_filters(status=" Active ")
-    assert clause == {"terms": {"status_code": ["Active", "ACTIVE", "active"]}}
+    values = clause["terms"]["status_code"]
+    assert {"A", "ACTIVE", "active", "O", "OPERATIONAL"} <= set(values)
 
 
-def test_build_filters_status_single_letter_deduplicates():
-    (clause,) = hybrid_search.build_filters(status="O")
-    assert clause == {"terms": {"status_code": ["O", "o"]}}
+def test_build_filters_unknown_status_matches_as_given_in_common_casings():
+    (clause,) = hybrid_search.build_filters(status="Dead")
+    assert clause == {"terms": {"status_code": ["Dead", "DEAD", "dead"]}}
 
 
 def test_build_filters_date_range_is_inclusive_and_format_pinned():

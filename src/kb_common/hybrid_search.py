@@ -6,6 +6,7 @@ Combines `knn` + `query` in one Elasticsearch request (native score summing)
 from datetime import date
 
 from kb_common import embed, es_index, timing
+from kb_common.filters import build_filters  # noqa: F401  (re-exported: the shared filter builder)
 
 DEFAULT_FIELDS = ("source", "summary_text")
 
@@ -31,64 +32,6 @@ def _strip_noise_words(query_text: str) -> str:
 
 
 KNN_HYBRID_BOOST = 15.0
-
-# Structured filter arguments -> the indexed field each one is enforced on.
-# sea_area / ocean_region / sensor_codes carry the lowercase normalizer (see
-# kb_common.es_index), so their term queries take a lowercased value.
-FILTER_FIELDS = {
-    "sea_area": "sea_area.keyword",
-    "ocean_basin": "ocean_region.keyword",
-    "sensor": "sensor_codes",
-}
-STATUS_FIELD = "status_code"
-DATE_FIELD = "last_cycle_date"
-
-
-def _normalize(value: str) -> str:
-    return value.strip().lower()
-
-
-def _status_variants(value: str) -> list[str]:
-    """`status_code` is a plain (un-normalized) keyword, so match the value as
-    given plus its upper/lower-case forms rather than guessing the casing."""
-    value = value.strip()
-    return list(dict.fromkeys([value, value.upper(), value.lower()]))
-
-
-def _iso(value: date | str) -> str:
-    return value.isoformat() if isinstance(value, date) else value.strip()
-
-
-def build_filters(
-    source: str | None = None,
-    sea_area: str | None = None,
-    ocean_basin: str | None = None,
-    sensor: str | None = None,
-    status: str | None = None,
-    date_min: date | str | None = None,
-    date_max: date | str | None = None,
-) -> list[dict]:
-    """Elasticsearch filter clauses (non-scoring, strictly enforced) for the
-    structured arguments; unset arguments add nothing. `date_min`/`date_max`
-    bound the float's last reported cycle date, both inclusive (a date-only
-    `date_max` covers the whole day)."""
-    filters = []
-    if source:
-        filters.append({"term": {"source": source}})
-    for arg, value in (("sea_area", sea_area), ("ocean_basin", ocean_basin), ("sensor", sensor)):
-        if value:
-            filters.append({"term": {FILTER_FIELDS[arg]: _normalize(value)}})
-    if status:
-        filters.append({"terms": {STATUS_FIELD: _status_variants(status)}})
-    if date_min or date_max:
-        bounds = {"format": "strict_date_optional_time"}
-        if date_min:
-            bounds["gte"] = _iso(date_min)
-        if date_max:
-            bounds["lte"] = _iso(date_max)
-        filters.append({"range": {DATE_FIELD: bounds}})
-    return filters
-
 
 def _as_filter(filters: list[dict]):
     """A single clause stays a plain query; several become a list (both are

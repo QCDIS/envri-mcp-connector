@@ -8,6 +8,7 @@ import requests
 from elasticsearch import NotFoundError
 
 from kb_common import es_index, timing
+from kb_common.filters import build_filters
 from kb_mcp import config
 
 log = logging.getLogger(__name__)
@@ -122,6 +123,43 @@ def term_filter(index: str, field: str, value: str, limit: int = 20):
         value = normalize_filter_value(value)
     resp = client.search(index=index, query={"term": {field: value}}, size=limit, source=_SOURCE_FIELDS)
     return _hits_to_dicts(resp)
+
+
+_FLOAT_LISTING_FIELDS = [*_SOURCE_FIELDS, "status_code", "deployment_date"]
+
+
+def filter_floats(
+    index: str,
+    status: str | None = None,
+    deployed_after: str | None = None,
+    deployed_before: str | None = None,
+    limit: int = 20,
+):
+    """Euro-Argo floats by operational status and/or deployment-date window,
+    most recently deployed first. Maps to a `terms` query on status_code and
+    a `range` query on deployment_date (see kb_common.filters); at least one
+    criterion is required."""
+    if not (status or deployed_after or deployed_before):
+        raise ValueError("give at least one of status, deployed_after, deployed_before")
+    filters = build_filters(
+        source="euro_argo", status=status, deployed_after=deployed_after, deployed_before=deployed_before
+    )
+    client = es_index.get_client()
+    resp = client.search(
+        index=index,
+        query={"bool": {"filter": filters}},
+        sort=[{"deployment_date": {"order": "desc", "missing": "_last"}}],
+        size=limit,
+        source=_FLOAT_LISTING_FIELDS,
+    )
+    return [
+        {
+            "_id": hit["_id"],
+            "url": _source_url(hit["_id"]),
+            **{f: hit["_source"].get(f) for f in _FLOAT_LISTING_FIELDS},
+        }
+        for hit in resp["hits"]["hits"]
+    ]
 
 
 def geo_distance(index: str, field: str, lat: float, lon: float, radius_km: float, limit: int = 20):
